@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EARTH GOLF · 林克斯 18 洞球场</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1410;
+    font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; color: #eafff2;
+    user-select: none; -webkit-user-select: none; }
+  #c { position: fixed; inset: 0; }
+  .panel { position: fixed; background: rgba(6,16,11,.78); border: 1px solid #1d4a2e;
+    border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(6px); font-size: 13px; z-index: 10; }
+  .panel b { color: #5ad395; }
+  #holeCard { top: 14px; right: 14px; min-width: 250px; }
+  #holeCard h2 { font-size: 15px; color: #5ad395; letter-spacing: .08em; margin-bottom: 6px; }
+  #holeCard .row { display: flex; justify-content: space-between; gap: 14px; line-height: 1.75; }
+  #holeCard .row span:last-child { color: #d7ffe6; font-variant-numeric: tabular-nums; }
+  #wind { top: 14px; left: 14px; text-align: center; min-width: 130px; }
+  #wind .dir { font-size: 22px; color: #ffd76a; }
+  #caddy { left: 14px; top: 130px; max-width: 290px; line-height: 1.7; color: #b9e8cc; }
+  #caddy b { color: #ffd76a; }
+  #controls { left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; gap: 18px;
+    align-items: center; padding: 12px 20px; }
+  #controls .ctl { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: #8fbfa3; }
+  #controls input[type=range] { width: 150px; accent-color: #32f08c; }
+  #controls .val { color: #eafff2; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .clubBtn { background: transparent; border: 1px solid #32f08c; color: #32f08c; border-radius: 6px;
+    width: 30px; height: 30px; font-size: 16px; cursor: pointer; }
+  .clubBtn:active { background: #32f08c33; }
+  #swingBtn { width: 84px; height: 84px; border-radius: 50%; border: 3px solid #32f08c;
+    background: radial-gradient(circle, #123524, #070d12); color: #32f08c; font-size: 17px;
+    font-weight: 800; letter-spacing: .1em; cursor: pointer; }
+  #swingBtn:active { background: #32f08c; color: #04120a; }
+  #swingBtn:disabled { opacity: .35; cursor: default; }
+  /* 大字层 */
+  #big { position: fixed; top: 16%; width: 100%; text-align: center; pointer-events: none; z-index: 20;
+    opacity: 0; transition: opacity .25s; }
+  #big.show { opacity: 1; }
+  #big .label { font-size: 20px; letter-spacing: .5em; color: #8fbfa3; font-weight: 600; }
+  #big .num { font-size: 96px; font-weight: 900; color: #32f08c; line-height: 1;
+    text-shadow: 0 0 34px rgba(50,240,140,.6), 0 3px 0 #0a3d22; font-variant-numeric: tabular-nums; }
+  #big .unit { font-size: 28px; color: #b9e8cc; font-weight: 700; margin-left: 8px; }
+  #big .sub { font-size: 22px; color: #ffd76a; font-weight: 700; margin-top: 6px; letter-spacing: .12em; }
+  #big.gold .num { color: #ffd76a; text-shadow: 0 0 34px rgba(255,215,106,.65), 0 3px 0 #5c3d05; }
+  /* 记分卡 */
+  #scorecard { top: 50%; left: 50%; transform: translate(-50%,-50%); display: none; z-index: 30;
+    padding: 18px; max-height: 82vh; overflow: auto; }
+  #scorecard.open { display: block; }
+  #scorecard table { border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  #scorecard th, #scorecard td { border: 1px solid #1d4a2e; padding: 4px 7px; text-align: center; min-width: 30px; }
+  #scorecard th { color: #5ad395; }
+  #scorecard td.cur { background: #123524; color: #ffd76a; font-weight: 700; }
+  #scoreBtn { position: fixed; top: 14px; right: 282px; z-index: 10; background: rgba(6,16,11,.78);
+    border: 1px solid #1d4a2e; color: #5ad395; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; }
+  #overviewBtn { position: fixed; top: 58px; right: 282px; z-index: 10; background: rgba(6,16,11,.78);
+    border: 1px solid #1d4a2e; color: #5ad395; border-radius: 8px; padding: 8px 12px; font-size: 12px; cursor: pointer; }
+  #loading { position: fixed; inset: 0; background: #0a1410; z-index: 100; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
+  #loading h1 { color: #5ad395; letter-spacing: .2em; font-size: 22px; }
+  #loading .barWrap { width: 280px; height: 8px; background: #10241a; border-radius: 4px; overflow: hidden; }
+  #loading .bar { height: 100%; width: 0; background: linear-gradient(90deg,#32f08c,#ffd76a); transition: width .2s; }
+  #loading .tip { color: #7fa68d; font-size: 12px; }
+  #skipTip { position: fixed; bottom: 90px; width: 100%; text-align: center; color: #b9e8cc;
+    font-size: 14px; letter-spacing: .2em; z-index: 15; display: none; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  #title { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 10;
+    color: #5ad395; font-size: 13px; letter-spacing: .18em; opacity: .85; }
+</style>
+</head>
+<body>
+<div id="loading"><h1>EARTH GOLF · 林克斯球场</h1>
+  <div class="barWrap"><div class="bar" id="loadBar"></div></div>
+  <div class="tip" id="loadTip">正在生成 18 洞球场…</div></div>
+<div id="c"></div>
+<div id="title">EARTH GOLF · THE LINKS · PAR 72</div>
+<div class="panel" id="wind"><div style="color:#8fbfa3;font-size:11px;letter-spacing:.15em">WIND 风场</div>
+  <div class="dir" id="windArrow">↑</div><div id="windTxt">--</div></div>
+<div class="panel" id="caddy"><b>CADDY 球童</b><br><span id="caddyTxt">—</span></div>
+<div class="panel" id="holeCard"><h2 id="holeName">HOLE 1</h2>
+  <div class="row"><span>Par</span><span id="hcPar">4</span></div>
+  <div class="row"><span>洞长</span><span id="hcLen">—</span></div>
+  <div class="row"><span>剩余</span><span id="hcLeft">—</span></div>
+  <div class="row"><span>本洞杆数</span><span id="hcStrokes">0</span></div>
+  <div class="row"><span>总杆 (±Par)</span><span id="hcTotal">—</span></div></div>
+<button id="scoreBtn">记分卡</button>
+<button id="overviewBtn">俯瞰全场</button>
+<div class="panel" id="scorecard"><table id="scoreTbl"></table></div>
+<div id="controls">
+  <div class="ctl">瞄准方向<input type="range" id="aim" min="-30" max="30" step="0.5" value="0"><span class="val" id="aimV">0.0°</span></div>
+  <div class="ctl">球杆
+    <div style="display:flex;gap:6px;align-items:center"><button class="clubBtn" id="clubDown">−</button>
+    <span class="val" id="clubV" style="min-width:64px;text-align:center">Driver</span>
+    <button class="clubBtn" id="clubUp">+</button></div><span>&nbsp;</span></div>
+  <div class="ctl">力量<input type="range" id="power" min="20" max="100" step="1" value="95"><span class="val" id="powerV">95%</span></div>
+  <button id="swingBtn">挥杆</button>
+</div>
+<div id="big"><div class="label" id="bigLabel">SHOT</div><div><span class="num" id="bigNum">0</span><span class="unit" id="bigUnit">YDS</span></div><div class="sub" id="bigSub"></div></div>
+<div id="skipTip">点击任意处跳过 ▸</div>
+
+<script>
+"use strict";
+/* ============ 随机数（固定种子 → 球场布局恒定） ============ */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const rnd = mulberry32(20261024);
+
+/* ============ 值噪声地形基函数 ============ */
+const PERM = new Uint8Array(512);
+{ const r = mulberry32(777); const p = [...Array(256).keys()];
+  for (let i=255;i>0;i--){const j=Math.floor(r()*(i+1));[p[i],p[j]]=[p[j],p[i]];}
+  for (let i=0;i<512;i++) PERM[i]=p[i&255]; }
+function vnoise(x,z){
+  const xi=Math.floor(x),zi=Math.floor(z),xf=x-xi,zf=z-zi;
+  const h=(X,Z)=>PERM[(PERM[(X&255)]+(Z&255))&511]/255;
+  const u=xf*xf*(3-2*xf),v=zf*zf*(3-2*zf);
+  return h(xi,zi)*(1-u)*(1-v)+h(xi+1,zi)*u*(1-v)+h(xi,zi+1)*(1-u)*v+h(xi+1,zi+1)*u*v;
+}
+function fbm(x,z){ return vnoise(x*0.004,z*0.004)*14 + vnoise(x*0.014,z*0.014)*4 + vnoise(x*0.05,z*0.05)*0.9 - 9.5; }
+
+/* ============ 18 洞布局生成（环路：前9外环顺时针，后9内环继续） ============ */
+const PARS = [4,5,3,4,4,3,4,5,4, 4,4,3,5,4,3,4,4,5];
+const HOLE_NAMES = ["启幕","湖畔","短枪","转角","长堤","松影","海峡","爬坡","归巢",
+  "再战","深谷","小岛","长风","沙廊","碧波","暮色","决胜","凯旋"];
+function lenForPar(par){ return par===3 ? 150+rnd()*45 : par===4 ? 280+rnd()*100 : 430+rnd()*80; }
+const V2=(x,z)=>({x,z});
+function distPtSeg(p,a,b){
+  const dx=b.x-a.x,dz=b.z-a.z,L2=dx*dx+dz*dz;
+  let t=L2?((p.x-a.x)*dx+(p.z-a.z)*dz)/L2:0; t=Math.max(0,Math.min(1,t));
+  const px=a.x+dx*t,pz=a.z+dz*t; return Math.hypot(p.x-px,p.z-pz);
+}
+function distToPath(x,z,path){ let d=1e9; for(let i=0;i<path.length-1;i++) d=Math.min(d,distPtSeg({x,z},path[i],path[i+1])); return d; }
+
+const holes = [];
+{
+  let pos = V2(0,0), dir = 0;                       // 从会所出发朝东
+  const turnPer = Math.PI*2/18;
+  const placedPts = [];
+  for (let i=0;i<18;i++){
+    const par = PARS[i], len = lenForPar(par);
+    let path=null, ok=false;
+    for (let attempt=0; attempt<12 && !ok; attempt++){
+      const bend = rnd()<0.45 ? (rnd()<0.5?-1:1)*(0.25+rnd()*0.35) : 0;   // 狗腿 ±14°~34°
+      const L1 = bend ? len*(0.5+rnd()*0.12) : len;
+      const elbow = V2(pos.x+Math.cos(dir)*L1, pos.z+Math.sin(dir)*L1);
+      const dir2 = dir + bend;
+      const end = bend ? V2(elbow.x+Math.cos(dir2)*(len-L1), elbow.z+Math.sin(dir2)*(len-L1)) : elbow;
+      path = bend ? [pos,elbow,end] : [pos,end];
+      // 只避让非相邻洞（链式布局新 tee 必然贴着上一洞 green，相邻洞豁免）
+      ok = placedPts.every(q=>q.hole>=i-1 || distToPath(q.x,q.z,path)>48)
+        && Math.abs(end.x)<1000 && Math.abs(end.z)<1000;
+      if (!ok) dir += 0.07;
+    }
+    const green = path[path.length-1], greenR = 9+rnd()*4;
+    const h = { idx:i, par, name:HOLE_NAMES[i], len: Math.round(len),
+      tee: V2(pos.x,pos.z), green, greenR, path, bunkers: [], waters: [] };
+    // 落点区沙坑（球道侧翼）
+    const nFB = par===3 ? 0 : (rnd()<0.6?1:2);
+    for (let b=0;b<nFB;b++){
+      const t=0.55+rnd()*0.2, seg=path.length-2, a=path[Math.floor(seg*t)], c=path[Math.floor(seg*t)+1];
+      const bx=a.x+(c.x-a.x)*(seg*t%1), bz=a.z+(c.z-a.z)*(seg*t%1);
+      const dd=Math.atan2(c.z-a.z,c.x-a.x), off=(rnd()<0.5?-1:1)*(9+rnd()*7);
+      h.bunkers.push({x:bx-Math.sin(dd)*off, z:bz+Math.cos(dd)*off, rx:4+rnd()*4, rz:2.5+rnd()*2, rot:rnd()*3});
+    }
+    // 果岭沙坑
+    const nGB = 1+Math.floor(rnd()*2);
+    for (let b=0;b<nGB;b++){
+      const ga=rnd()*Math.PI*2, gd=greenR+2.5+rnd()*3;
+      h.bunkers.push({x:green.x+Math.cos(ga)*gd, z:green.z+Math.sin(ga)*gd, rx:3+rnd()*2.5, rz:2+rnd()*1.5, rot:rnd()*3});
+    }
+    // 水障碍：Par3 洞前塘，或球道后段横溪（避开满挥落点区，首洞教学不放主水）
+    const mid = path[Math.floor(path.length/2)];
+    if (i>0 && (par===3 || rnd()<0.35)){
+      const t=par===3?0.8:0.55+rnd()*0.23, a=path[0], c=path[path.length-1];
+      h.waters.push({x:a.x+(c.x-a.x)*t, z:a.z+(c.z-a.z)*t, r:12+rnd()*8});
+    } else if (i>0 && rnd()<0.3){
+      h.waters.push({x:mid.x+(rnd()-0.5)*30, z:mid.z+(rnd()-0.5)*30, r:9+rnd()*8});
+    }
+    holes.push(h);
+    placedPts.push({...h.tee,hole:i},{...h.green,hole:i},...path.map(p=>({...p,hole:i})));
+    const dd = Math.atan2(green.z-pos.z, green.x-pos.x);
+    pos = V2(green.x+Math.cos(dd+Math.PI/2)*(rnd()<0.5?-24:24)+Math.cos(dd)*8,
+             green.z+Math.sin(dd+Math.PI/2)*(rnd()<0.5?-24:24)+Math.sin(dd)*8);
+    dir = dd + turnPer + (rnd()-0.5)*0.14;
+  }
+}
+
+/* ============ 地形高度 & 地表材质（解析函数，物理与渲染共用） ============ */
+function baseHeight(x,z){ return fbm(x,z); }
+/* 走廊修正后的高度 */
+function groundHeight(x,z){
+  let h = baseHeight(x,z);
+  for (const hdef of holes){
+    // AABB 粗筛
+    let mnx=1e9,mxx=-1e9,mnz=1e9,mxz=-1e9;
+    for (const p of hdef.path){ mnx=Math.min(mnx,p.x);mxx=Math.max(mxx,p.x);mnz=Math.min(mnz,p.z);mxz=Math.max(mxz,p.z);}
+    if (x<mnx-60||x>mxx+60||z<mnz-60||z>mxz+60) continue;
+    const d = distToPath(x,z,hdef.path);
+    const dG = Math.hypot(x-hdef.green.x, z-hdef.green.z);
+    const dT = Math.hypot(x-hdef.tee.x, z-hdef.tee.z);
+    if (dG < hdef.greenR+10){
+      const hg = baseHeight(hdef.green.x,hdef.green.z)+0.35;
+      const w = dG<hdef.greenR ? 1 : 1-(dG-hdef.greenR)/10;
+      h = h*(1-w) + hg*w;
+    } else if (dT < 7){
+      const ht = baseHeight(hdef.tee.x,hdef.tee.z)+0.25;
+      const w = dT<4 ? 1 : 1-(dT-4)/3;
+      h = h*(1-w) + ht*w;
+    } else if (d < 34){
+      // 球道纵向：向 tee→green 的线性插值高度靠拢
+      const total = hdef.len;
+      let s=0, acc=0, best=1e9;
+      for (let i=0;i<hdef.path.length-1;i++){
+        const a=hdef.path[i],b=hdef.path[i+1],segL=Math.hypot(b.x-a.x,b.z-a.z);
+        const dd=distPtSeg({x,z},a,b); if(dd<best){best=dd;
+          const L2=(b.x-a.x)**2+(b.z-a.z)**2; let t=L2?((x-a.x)*(b.x-a.x)+(z-a.z)*(b.z-a.z))/L2:0;
+          s = acc + Math.max(0,Math.min(1,t))*segL; }
+        acc+=segL;
+      }
+      const hf = baseHeight(hdef.tee.x,hdef.tee.z)*(1-s/total) + baseHeight(hdef.green.x,hdef.green.z)*(s/total);
+      const w = d<13 ? 0.85 : d<24 ? 0.85*(1-(d-13)/11) : 0.35*(1-(d-24)/10);
+      h = h*(1-Math.max(0,w)) + hf*Math.max(0,w);
+    }
+  }
+  // 水塘下压 & 沙坑凹陷
+  for (const hdef of holes){
+    for (const w of hdef.waters){
+      const d = Math.hypot(x-w.x,z-w.z);
+      if (d < w.r+8){
+        const t = d<w.r ? 1 : 1-(d-w.r)/8;
+        h = Math.min(h, (h*(1-t)) + (w.level-2.2)*t);
+      }
+    }
+    for (const b of hdef.bunkers){
+      const dx=x-b.x,dz=z-b.z, cr=Math.cos(b.rot),sr=Math.sin(b.rot);
+      const ex=(dx*cr+dz*sr)/b.rx, ez=(-dx*sr+dz*cr)/b.rz, e=ex*ex+ez*ez;
+      if (e<1.4) h -= 0.55*Math.max(0,1-e/1.4);
+    }
+  }
+  return h;
+}
+/* 水面高度表（生成时定） */
+for (const h of holes) for (const w of h.waters) w.level = baseHeight(w.x,w.z)+0.15;
+/* 环路幅员中心（俯瞰相机用） */
+const courseCenter = (()=>{
+  let xs=[],zs=[];
+  for (const h of holes){ xs.push(h.tee.x,h.green.x); zs.push(h.tee.z,h.green.z); }
+  return { x:(Math.min(...xs)+Math.max(...xs))/2, z:(Math.min(...zs)+Math.max(...zs))/2 };
+})();
+
+function surfaceAt(x,z){
+  for (const hdef of holes){
+    for (const w of hdef.waters) if (Math.hypot(x-w.x,z-w.z)<w.r && groundHeight(x,z)<w.level) return "water";
+  }
+  for (const hdef of holes){
+    for (const b of hdef.bunkers){
+      const dx=x-b.x,dz=z-b.z, cr=Math.cos(b.rot),sr=Math.sin(b.rot);
+      const ex=(dx*cr+dz*sr)/b.rx, ez=(-dx*sr+dz*cr)/b.rz;
+      if (ex*ex+ez*ez<1) return "sand";
+    }
+  }
+  for (const hdef of holes){
+    if (Math.hypot(x-hdef.green.x,z-hdef.green.z)<hdef.greenR) return "green";
+    if (Math.hypot(x-hdef.tee.x,z-hdef.tee.z)<4) return "tee";
+    if (distToPath(x,z,hdef.path)<13) return "fairway";
+  }
+  return "rough";
+}
+
+/* ============ Three.js 场景 ============ */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById("c").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87b8d8);
+scene.fog = new THREE.Fog(0x9fc6de, 500, 2600);
+const camera = new THREE.PerspectiveCamera(58, innerWidth/innerHeight, 0.1, 6000);
+addEventListener("resize", ()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+const sun = new THREE.DirectionalLight(0xfff2dd, 1.15);
+sun.position.set(-500, 700, 350);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+sun.shadow.camera.left=-320; sun.shadow.camera.right=320;
+sun.shadow.camera.top=320; sun.shadow.camera.bottom=-320;
+sun.shadow.camera.far=2200; sun.shadow.bias=-0.0006;
+scene.add(sun, new THREE.HemisphereLight(0xbfe3ff, 0x2a5a34, 0.75));
+
+/* 地形 mesh（顶点色：球道条纹/长草/果岭/沙/水下） */
+const WORLD=2400, SEG=384;
+let terrain;
+/* 程序草叶纹理：白底 + 细草 stroke，与顶点色相乘出近景细节 */
+function grassTexture(){
+  const cv=document.createElement("canvas"); cv.width=cv.height=256;
+  const g=cv.getContext("2d");
+  g.fillStyle="#e8f0e4"; g.fillRect(0,0,256,256);
+  for(let i=0;i<11000;i++){
+    const x=Math.random()*256, y=Math.random()*256, l=1+Math.random()*2.6;
+    const v=150+Math.random()*80|0;
+    g.strokeStyle=`rgba(${v*0.5|0},${v},${v*0.45|0},${0.25+Math.random()*0.35})`;
+    g.beginPath(); g.moveTo(x,y); g.lineTo(x+(Math.random()*2-1)*0.8, y-l); g.stroke();
+  }
+  const t=new THREE.CanvasTexture(cv);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(320,320);
+  return t;
+}
+function stripe(x,z){ return 1; }
+function buildTerrain(){
+  const geo = new THREE.PlaneGeometry(WORLD,WORLD,SEG,SEG);
+  geo.rotateX(-Math.PI/2);
+  const pos = geo.attributes.position;
+  const colors = new Float32Array(pos.count*3);
+  const C = { fair:[0.24,0.62,0.30], fair2:[0.20,0.55,0.26], rough:[0.13,0.38,0.18],
+    green:[0.34,0.76,0.38], tee:[0.30,0.68,0.33], sand:[0.91,0.85,0.62], bed:[0.30,0.26,0.18], wild:[0.10,0.30,0.14] };
+  for (let i=0;i<pos.count;i++){
+    const x=pos.getX(i), z=pos.getZ(i);
+    const h = groundHeight(x,z);
+    pos.setY(i,h);
+    const s = surfaceAt(x,z);
+    let c = C.wild;
+    if (s==="fairway"){
+      // 沿洞方向剪草条纹
+      let c2=C.fair;
+      for (const hd of holes){
+        const d=distToPath(x,z,hd.path);
+        if (d<13){
+          let acc=0,s2=0,best=1e9;
+          for(let j=0;j<hd.path.length-1;j++){const a=hd.path[j],b=hd.path[j+1],segL=Math.hypot(b.x-a.x,b.z-a.z);
+            const dd=distPtSeg({x,z},a,b); if(dd<best){best=dd;const L2=(b.x-a.x)**2+(b.z-a.z)**2;let t=L2?((x-a.x)*(b.x-a.x)+(z-a.z)*(b.z-a.z))/L2:0;s2=acc+Math.max(0,Math.min(1,t))*segL;}acc+=segL;}
+          c2 = (Math.floor(s2/9)%2) ? C.fair : C.fair2;
+          break;
+        }
+      }
+      c = c2;
+    }
+    else if (s==="green") c=C.green;
+    else if (s==="tee") c=C.tee;
+    else if (s==="sand") c=C.sand;
+    else if (s==="water") c=C.bed;
+    else {
+      const n=vnoise(x*0.05,z*0.05);
+      c = n>0.62 ? C.wild : (n>0.4 ? C.rough : C.wild);
+      if (distToAnyPath(x,z)<26) c=C.rough;
+    }
+    const shade = 0.92+vnoise(x*0.11,z*0.11)*0.16;
+    colors[i*3]=Math.min(1,c[0]*shade); colors[i*3+1]=Math.min(1,c[1]*shade); colors[i*3+2]=Math.min(1,c[2]*shade);
+  }
+  geo.setAttribute("color", new THREE.BufferAttribute(colors,3));
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshLambertMaterial({ vertexColors:true, map:grassTexture() });
+  terrain = new THREE.Mesh(geo,mat);
+  terrain.receiveShadow = true;
+  scene.add(terrain);
+}
+function distToAnyPath(x,z){ let d=1e9; for(const h of holes) d=Math.min(d,distToPath(x,z,h.path)); return d; }
+
+/* 水面 */
+function buildWaters(){
+  const mat = new THREE.MeshLambertMaterial({ color:0x2f7fb8, transparent:true, opacity:0.82 });
+  for (const h of holes) for (const w of h.waters){
+    const g = new THREE.CircleGeometry(w.r, 28);
+    g.rotateX(-Math.PI/2);
+    const m = new THREE.Mesh(g, mat);
+    m.position.set(w.x, w.level, w.z);
+    scene.add(m);
+  }
+}
+/* 树木（松树 + 阔叶，Instanced） */
+function buildTrees(){
+  const pineGeo = new THREE.ConeGeometry(1.7, 5.2, 7);
+  const pineMat = new THREE.MeshLambertMaterial({ color:0x1d4a26 });
+  const leafGeo = new THREE.IcosahedronGeometry(2.3, 0);
+  const leafMat = new THREE.MeshLambertMaterial({ color:0x2c6b31 });
+  const trunkGeo = new THREE.CylinderGeometry(0.14,0.22,2.2,5);
+  const trunkMat = new THREE.MeshLambertMaterial({ color:0x5a4630 });
+  const N1=420,N2=320;
+  const pines=new THREE.InstancedMesh(pineGeo,pineMat,N1);
+  const leafs=new THREE.InstancedMesh(leafGeo,leafMat,N2);
+  const trunks=new THREE.InstancedMesh(trunkGeo,trunkMat,N1+N2);
+  pines.castShadow=leafs.castShadow=true;
+  const M=new THREE.Matrix4(), Q=new THREE.Quaternion(), S=new THREE.Vector3(), P=new THREE.Vector3();
+  let i1=0,i2=0,it=0,guard=0;
+  while (i1+i2 < N1+N2 && guard++<60000){
+    const x=(rnd()-0.5)*2200, z=(rnd()-0.5)*2200;
+    if (distToAnyPath(x,z)<26) continue;
+    let near=false;
+    for (const h of holes){ if (Math.hypot(x-h.green.x,z-h.green.z)<h.greenR+16 || Math.hypot(x-h.tee.x,z-h.tee.z)<10){near=true;break;}
+      for (const w of h.waters) if (Math.hypot(x-w.x,z-w.z)<w.r+6){near=true;break;} }
+    if (near) continue;
+    const sc=0.7+rnd()*1.1, y=groundHeight(x,z);
+    const isPine = (i1<N1) && (i2>=N2 || rnd()<0.57);
+    P.set(x,y,z); S.set(sc,sc,sc); Q.setFromAxisAngle(new THREE.Vector3(0,1,0),rnd()*6.28);
+    M.compose(P.clone().setY(y+1.0*sc),Q,S); trunks.setMatrixAt(it++,M);
+    M.compose(P.clone().setY(y+(isPine?3.6:3.0)*sc),Q,S);
+    if (isPine) pines.setMatrixAt(i1++,M); else leafs.setMatrixAt(i2++,M);
+  }
+  pines.count=i1; leafs.count=i2; trunks.count=it;
+  scene.add(pines,leafs,trunks);
+}
+/* 旗杆 + 洞杯 + 发球台标记 */
+const pins=[];
+function buildMarkers(){
+  for (const h of holes){
+    const gy=groundHeight(h.green.x,h.green.z);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,2.4,6),
+      new THREE.MeshLambertMaterial({color:0xf2f2f2}));
+    pole.position.set(h.green.x,gy+1.2,h.green.z);
+    const flagShape=new THREE.Shape(); flagShape.moveTo(0,0);flagShape.lineTo(0.85,0.22);flagShape.lineTo(0,0.5);flagShape.lineTo(0,0);
+    const flag=new THREE.Mesh(new THREE.ShapeGeometry(flagShape),
+      new THREE.MeshBasicMaterial({color:0xe8402a,side:THREE.DoubleSide}));
+    flag.position.set(h.green.x,gy+1.85,h.green.z);
+    const cup=new THREE.Mesh(new THREE.CircleGeometry(0.12,12),
+      new THREE.MeshBasicMaterial({color:0x050505}));
+    cup.rotation.x=-Math.PI/2; cup.position.set(h.green.x,gy+0.02,h.green.z);
+    scene.add(pole,flag,cup); pins.push(flag);
+    // tee 标记两个蓝球
+    const dd=Math.atan2(h.path[1].z-h.path[0].z,h.path[1].x-h.path[0].x);
+    const ty=groundHeight(h.tee.x,h.tee.z);
+    for (const s of [-1.2,1.2]){
+      const t=new THREE.Mesh(new THREE.SphereGeometry(0.14,10,8),
+        new THREE.MeshLambertMaterial({color:0x3a7bd5}));
+      t.position.set(h.tee.x-Math.sin(dd)*s, ty+0.14, h.tee.z+Math.cos(dd)*s);
+      scene.add(t);
+    }
+  }
+}
+/* 会所 */
+function buildClubhouse(){
+  const base=new THREE.Mesh(new THREE.BoxGeometry(22,6,12), new THREE.MeshLambertMaterial({color:0xd9d2c0}));
+  base.position.set(-14,groundHeight(-14,-16)+3,-16); base.castShadow=true;
+  const roof=new THREE.Mesh(new THREE.ConeGeometry(14,4.5,4), new THREE.MeshLambertMaterial({color:0x8a4a3a}));
+  roof.position.set(-14,groundHeight(-14,-16)+8.2,-16); roof.rotation.y=Math.PI/4;
+  scene.add(base,roof);
+}
+/* 云 */
+function buildClouds(){
+  const cv=document.createElement("canvas");cv.width=cv.height=128;
+  const g=cv.getContext("2d"),grad=g.createRadialGradient(64,64,10,64,64,64);
+  grad.addColorStop(0,"rgba(255,255,255,.9)");grad.addColorStop(1,"rgba(255,255,255,0)");
+  g.fillStyle=grad;g.fillRect(0,0,128,128);
+  const tex=new THREE.CanvasTexture(cv);
+  for(let i=0;i<10;i++){
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:0.7,depthWrite:false}));
+    sp.scale.set(260+rnd()*260,70+rnd()*50,1);
+    sp.position.set((rnd()-0.5)*3000,180+rnd()*160,(rnd()-0.5)*3000);
+    scene.add(sp);
+  }
+}
+/* 球 + 拖尾 */
+const ball=new THREE.Mesh(new THREE.SphereGeometry(0.22,14,12), new THREE.MeshBasicMaterial({color:0xffffff}));
+scene.add(ball);
+function glowDotTexture(){
+  const cv=document.createElement("canvas"); cv.width=cv.height=64;
+  const g=cv.getContext("2d"), grad=g.createRadialGradient(32,32,2,32,32,32);
+  grad.addColorStop(0,"rgba(255,240,190,1)"); grad.addColorStop(0.4,"rgba(255,215,106,.8)");
+  grad.addColorStop(1,"rgba(255,215,106,0)");
+  g.fillStyle=grad; g.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(cv);
+}
+const TRAIL_N=300;
+const trailGeo=new THREE.BufferGeometry();
+trailGeo.setAttribute("position",new THREE.BufferAttribute(new Float32Array(TRAIL_N*3),3));
+const trail=new THREE.Points(trailGeo,new THREE.PointsMaterial({
+  color:0xffd76a, size:0.85, sizeAttenuation:true, transparent:true, opacity:0.95,
+  map:glowDotTexture(), depthWrite:false, blending:THREE.AdditiveBlending }));
+trail.frustumCulled=false; trail.visible=false; scene.add(trail);
+let trailLen=0;
+function trailReset(){trailLen=0;trail.visible=false;}
+function trailPush(p){
+  const a=trailGeo.attributes.position.array;
+  if(trailLen<TRAIL_N){a[trailLen*3]=p.x;a[trailLen*3+1]=p.y;a[trailLen*3+2]=p.z;trailLen++;}
+  else{a.copyWithin(0,3);a[(TRAIL_N-1)*3]=p.x;a[(TRAIL_N-1)*3+1]=p.y;a[(TRAIL_N-1)*3+2]=p.z;}
+  trailGeo.setDrawRange(0,trailLen);
+  trailGeo.attributes.position.needsUpdate=true; trail.visible=true;
+}
+/* 瞄准辅助线 */
+const aimGeo=new THREE.BufferGeometry();
+aimGeo.setAttribute("position",new THREE.BufferAttribute(new Float32Array(2*3),3));
+const aimLine=new THREE.Line(aimGeo,new THREE.LineDashedMaterial({color:0x32f08c,dashSize:3,gapSize:2}));
+aimLine.computeLineDistances(); aimLine.frustumCulled=false; scene.add(aimLine);
+
+/* ============ 音效（WebAudio 合成） ============ */
+let actx=null, master=null, muted=false;
+function audio(){
+  if(!actx){actx=new (window.AudioContext||window.webkitAudioContext)();
+    master=actx.createGain();master.gain.value=1.2;master.connect(actx.destination);}
+  if(actx.state==="suspended")actx.resume();return actx;
+}
+function tone(t,f0,f1,dur,type,vol){
+  const a=audio(),o=a.createOscillator(),g=a.createGain();
+  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.05);
+}
+function nz(t,dur,vol,hp){
+  const a=audio(),len=Math.max(1,Math.floor(a.sampleRate*dur)),buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*(1-i/len);
+  const src=a.createBufferSource();src.buffer=buf;
+  const f=a.createBiquadFilter();f.type=hp?"highpass":"lowpass";f.frequency.value=hp||2200;
+  const g=a.createGain();g.gain.value=vol;
+  src.connect(f);f.connect(g);g.connect(master);src.start(t);
+}
+const sfxShot=()=>{if(muted)return;const a=audio(),t=a.currentTime;nz(t,0.18,1.0,1600);tone(t+0.09,1500,320,0.13,"square",0.65);};
+const sfxLand=()=>{if(muted)return;const a=audio(),t=a.currentTime;nz(t,0.13,0.7,0);tone(t,300,110,0.18,"sine",0.8);};
+const sfxWaterS=()=>{if(muted)return;const a=audio(),t=a.currentTime;nz(t,0.4,1.2,0);tone(t+0.04,700,130,0.32,"sine",0.5);};
+const sfxHole=()=>{if(muted)return;const a=audio(),t=a.currentTime;[880,1174.7,1568].forEach((f,i)=>tone(t+i*0.09,f,f,0.3,"triangle",0.7));};
+addEventListener("pointerdown",()=>audio(),{once:true});
+addEventListener("keydown",()=>audio(),{once:true});
+
+/* ============ 风 ============ */
+const windSpd = 2+Math.floor(rnd()*6);          // m/s
+const windDir = Math.floor(rnd()*360);          // 来向
+const windVec = { x:-Math.sin(windDir*Math.PI/180)*windSpd, z:-Math.cos(windDir*Math.PI/180)*windSpd };
+document.getElementById("windArrow").style.transform=`rotate(${windDir}deg)`;
+document.getElementById("windArrow").style.display="inline-block";
+document.getElementById("windTxt").textContent=`${windSpd} m/s · ${windDir}°`;
+
+/* ============ 球杆 & 物理 ============ */
+const CLUBS=[
+  {n:"Driver",loft:10.5,v:74},{n:"3 Wood",loft:15,v:69},{n:"5 Iron",loft:26,v:59},
+  {n:"7 Iron",loft:33,v:53},{n:"9 Iron",loft:41,v:45},{n:"PW",loft:47,v:39},
+  {n:"SW",loft:56,v:31},{n:"Putter",loft:2,v:9}
+];
+const G=9.8, K=0.0014, KL=0.0008, DRAG_LOFT_SCALE=2.0;  // 标定值：Driver carry≈215m
+function simulate(ballStart, clubIdx, power, aimDeg){
+  const club=CLUBS[clubIdx];
+  const az=aimDeg*Math.PI/180;
+  const pts=[{x:ballStart.x,y:ballStart.y,z:ballStart.z}];
+  let res={pts, holed:false, water:false, surface:"", carry:0, end:null};
+  if (club.n==="Putter"){
+    // 推杆：纯滚动。初速按"当前表面 μ"标定到目标距离 +0.8m 过洞余量；
+    // power 是精细微调（0.2~1.0 → ×0.76~1.0），不是砍距离的开关
+    const dist0=Math.hypot(cur.pin.x-ballStart.x,cur.pin.z-ballStart.z);
+    const surf0=surfaceAt(ballStart.x,ballStart.z);
+    const mu0=surf0==="green"?0.09:surf0==="fairway"||surf0==="tee"?0.13:0.22;
+    let v=Math.sqrt(2*mu0*G*(dist0+0.8))*(0.7+0.3*power);
+    let px=ballStart.x,pz=ballStart.z,dx=Math.sin(az),dz=-Math.cos(az);
+    // 注意方位：azim 0 = 朝 -Z 之外的定义见 aimDirTo
+    const dir3=aimDirTo(aimDeg,1);
+    dx=dir3.x;dz=dir3.z;
+    let speed=v;
+    for(let i=0;i<1200&&speed>0.02;i++){
+      const dt=0.016;
+      px+=dx*speed*dt;pz+=dz*speed*dt;
+      const gy=groundHeight(px,pz);
+      pts.push({x:px,y:gy+0.22,z:pz});
+      const s=surfaceAt(px,pz);
+      const mu=s==="green"?0.09:s==="fairway"?0.13:s==="sand"?2.5:0.28;
+      speed-=mu*G*dt;
+      if(s==="water"){res.water=true;break;}
+      const dp=Math.hypot(px-cur.pin.x,pz-cur.pin.z);
+      if(dp<0.25&&speed<3){res.holed=true;break;}
+      if(dp<0.06){res.holed=true;break;}
+      if(speed<0.02)res.surface=s;
+    }
+    res.end=pts[pts.length-1];return res;
+  }
+  const v0=club.v*power, el=club.loft*Math.PI/180;
+  const dir3=aimDirTo(aimDeg,1);
+  let p={...ballStart}, v={x:dir3.x*v0*Math.cos(el), y:v0*Math.sin(el), z:dir3.z*v0*Math.cos(el)};
+  let phase="fly", spin=1, apexY=0;
+  for(let i=0;i<4000;i++){
+    const dt=0.016;
+    if(phase==="fly"){
+      const sp=Math.hypot(v.x,v.y,v.z);
+      const kd=K*(1+(club.loft-10)/25*DRAG_LOFT_SCALE); // 高 loft 后旋大，drag 压弹道
+      const lift=KL*(v.x*v.x+v.z*v.z);                  // Magnus 升力（后旋托球）
+      v.x+=(-kd*sp*v.x + windVec.x*0.028*sp*0.02)*dt;
+      v.y+=(-G - kd*sp*v.y + lift)*dt;
+      v.z+=(-kd*sp*v.z + windVec.z*0.028*sp*0.02)*dt;
+      p.x+=v.x*dt;p.y+=v.y*dt;p.z+=v.z*dt;
+      apexY=Math.max(apexY,p.y);
+      const gy=groundHeight(p.x,p.z);
+      pts.push({...p});
+      if(p.y<=gy+0.22){
+        p.y=gy+0.22;
+        const s=surfaceAt(p.x,p.z);
+        res.carry=Math.hypot(p.x-ballStart.x,p.z-ballStart.z);
+        if(s==="water"){res.water=true;break;}
+        const rest=s==="green"?0.18:0.28;
+        if(Math.abs(v.y)>3){v.y=-v.y*rest;v.x*=0.68;v.z*=0.68;}
+        else{phase="roll";}
+      }
+    }else{
+      const sp=Math.hypot(v.x,v.z);
+      if(sp<0.05){res.surface=surfaceAt(p.x,p.z);break;}
+      const s=surfaceAt(p.x,p.z);
+      const mu=s==="green"?0.09:s==="fairway"?0.13:s==="sand"?2.2:s==="tee"?0.13:0.28;
+      const nx=v.x/sp,nz=v.z/sp;
+      // 坡度
+      const e=0.6,hx=(groundHeight(p.x+e,p.z)-groundHeight(p.x-e,p.z))/(2*e),
+            hz=(groundHeight(p.x,p.z+e)-groundHeight(p.x,p.z-e))/(2*e);
+      v.x+=(-mu*G*nx - G*hx*0.9)*dt; v.z+=(-mu*G*nz - G*hz*0.9)*dt;
+      if(s==="sand"){v.x*=0.86;v.z*=0.86;}
+      p.x+=v.x*dt;p.z+=v.z*dt;p.y=groundHeight(p.x,p.z)+0.22;
+      pts.push({...p});
+      const dp=Math.hypot(p.x-cur.pin.x,p.z-cur.pin.z);
+      if(dp<0.25&&sp<3){res.holed=true;break;}
+      if(dp<0.055){res.holed=true;break;}
+      if(s==="water"){res.water=true;break;}
+      res.surface=s;
+    }
+  }
+  res.end=pts[pts.length-1];
+  return res;
+}
+/* 方位角定义：0° 面向当前洞目标方向，右偏为正 */
+let aimBase=0;                                    // 当前目标方位（弧度，three 坐标）
+function aimDirTo(deg,len){
+  const a=aimBase+deg*Math.PI/180;
+  return {x:Math.cos(a)*len, z:Math.sin(a)*len};
+}
+function dirBetween(a,b){return Math.atan2(b.z-a.z,b.x-a.x);}
+
+/* ============ 游戏状态 ============ */
+let cur=null, holeIdx=0, strokes=0, scores=[], ballPos=null, lastShotFrom=null;
+let state="boot";                                 // brief | aim | flight | score
+const M2Y=m=>m*1.0936;
+function setHole(i){
+  holeIdx=i; cur=holes[i]; strokes=0;
+  cur.pin={x:cur.green.x,y:groundHeight(cur.green.x,cur.green.z),z:cur.green.z};
+  ballPos={x:cur.tee.x,y:groundHeight(cur.tee.x,cur.tee.z)+0.22,z:cur.tee.z};
+  ball.position.set(ballPos.x,ballPos.y,ballPos.z);
+  aimBase=dirBetween(cur.tee,cur.pin);
+  trailReset();
+  document.getElementById("holeName").textContent=`HOLE ${i+1} · ${cur.name}`;
+  document.getElementById("hcPar").textContent=cur.par;
+  document.getElementById("hcLen").textContent=Math.round(M2Y(cur.len))+" yds";
+  updateHUD(); updateAimLine();
+}
+function distToPin(){return Math.hypot(ballPos.x-cur.pin.x,ballPos.z-cur.pin.z);}
+function updateHUD(){
+  document.getElementById("hcLeft").textContent=Math.round(M2Y(distToPin()))+" yds";
+  document.getElementById("hcStrokes").textContent=strokes;
+  const tot=scores.reduce((a,s)=>a+s.strokes,0);
+  const parSoFar=holes.slice(0,scores.length).reduce((a,h)=>a+h.par,0);
+  const diff=tot-parSoFar;
+  document.getElementById("hcTotal").textContent=scores.length?`${tot} (${diff>0?"+":""}${diff})`:"—";
+  // 球童
+  const d=distToPin();
+  let ci=CLUBS.findIndex(c=>estCarry(c)>=d);
+  if(ci<0)ci=0;
+  if(d<40&&surfaceAt(ballPos.x,ballPos.z)!=="rough")ci=CLUBS.length-1;
+  clubIdx=ci;
+  document.getElementById("clubV").textContent=CLUBS[ci].n;
+  // 推荐杆同步推荐力量（推杆用满档微调，远杆留余量）
+  const pw = CLUBS[ci].n==="Putter" ? 90 : 95;
+  document.getElementById("power").value=pw;
+  document.getElementById("powerV").textContent=pw+"%";
+  const windTo=windDir;
+  // 球位→pin 连线上的水警提示
+  let waterWarn="";
+  for (const hd of holes) for (const w of hd.waters){
+    const dx=cur.pin.x-ballPos.x, dz=cur.pin.z-ballPos.z, L=Math.hypot(dx,dz);
+    if (L<1) continue;
+    const t=((w.x-ballPos.x)*dx+(w.z-ballPos.z)*dz)/(L*L);
+    if (t<=0||t>=1) continue;
+    const perp=Math.abs((w.x-ballPos.x)*dz-(w.z-ballPos.z)*dx)/L;
+    if (perp < w.r+6){
+      const dw=t*L-w.r;
+      if (dw>0){ waterWarn=`<br>⚠ 前方 <b>${Math.round(M2Y(dw))} yds</b> 有水`; break; }
+    }
+  }
+  document.getElementById("caddyTxt").innerHTML=
+    `剩 <b>${Math.round(M2Y(d))} yds</b> · 建议 <b>${CLUBS[ci].n}</b>`+
+    (windSpd>=4?`<br>风 ${windSpd} m/s，注意修正`:"")+waterWarn;
+  syncShadow();
+}
+function calibCarry(c){ // 用真实弹道引擎标定 carry（平地、无进洞判定）
+  if(c.n==="Putter")return 8;
+  const el=c.loft*Math.PI/180, v0=c.v*0.95;
+  const kd=K*(1+(c.loft-10)/25*DRAG_LOFT_SCALE);
+  let p={x:0,y:1,z:0}, v={x:v0*Math.cos(el), y:v0*Math.sin(el), z:0};
+  for(let i=0;i<3000;i++){
+    const dt=0.016, sp=Math.hypot(v.x,v.y,v.z);
+    const lift=KL*v.x*v.x;
+    v.x+=-kd*sp*v.x*dt; v.y+=(-G-kd*sp*v.y+lift)*dt; v.z+=-kd*sp*v.z*dt;
+    p.x+=v.x*dt; p.y+=v.y*dt;
+    if(p.y<=0)break;
+  }
+  return p.x;
+}
+CLUBS.forEach(c=>c.carryEst=calibCarry(c));
+function estCarry(c){ return c.carryEst; }
+let clubIdx=0;
+function updateAimLine(){
+  const deg=+document.getElementById("aim").value;
+  const d=aimDirTo(deg,60);
+  const a=aimGeo.attributes.position.array;
+  a[0]=ballPos.x;a[1]=ballPos.y+0.1;a[2]=ballPos.z;
+  a[3]=ballPos.x+d.x;a[4]=groundHeight(ballPos.x+d.x,ballPos.z+d.z)+0.3;a[5]=ballPos.z+d.z;
+  aimGeo.attributes.position.needsUpdate=true;
+  aimLine.computeLineDistances();
+}
+/* 相机 */
+let camMode="aim", camT=0;
+function aimCam(){
+  const back=aimDirTo(+document.getElementById("aim").value,-5.5);
+  const tx=ballPos.x+back.x, tz=ballPos.z+back.z;
+  const ty=groundHeight(tx,tz)+2.3;
+  camera.position.set(tx,ty,tz);
+  const fwd=aimDirTo(+document.getElementById("aim").value,120);
+  camera.lookAt(ballPos.x+fwd.x,ballPos.y+9,ballPos.z+fwd.z);   // 望向前方 120m 上空，尽收球道
+}
+function briefCam(t){ // 洞介绍：从果岭上空拉回发球台
+  const p=Math.min(1,t/3);
+  const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+  const g=cur.pin, te=ballPos;
+  const x=g.x+(te.x-g.x)*e, z=g.z+(te.z-g.z)*e;
+  const y=groundHeight(x,z)+28*(1-e)+3.2*e;
+  camera.position.set(x,y,z);
+  camera.lookAt(te.x,groundHeight(te.x,te.z)+1,te.z);
+}
+let flyCamPos=null;
+function flyCam(){
+  const d=aimDirTo(+document.getElementById("aim").value,-16);
+  const want={x:ball.position.x+d.x*0.7, z:ball.position.z+d.z*0.7};
+  want.y=Math.max(ball.position.y+7, groundHeight(want.x,want.z)+6);
+  if(!flyCamPos)flyCamPos=want;
+  flyCamPos.x+=(want.x-flyCamPos.x)*0.06;
+  flyCamPos.y+=(want.y-flyCamPos.y)*0.06;
+  flyCamPos.z+=(want.z-flyCamPos.z)*0.06;
+  camera.position.set(flyCamPos.x,flyCamPos.y,flyCamPos.z);
+  camera.lookAt(ball.position.x,ball.position.y,ball.position.z);
+}
+function overviewCam(){
+  // 环路实际幅员中心（生成后计算）
+  camera.position.set(courseCenter.x,1500,courseCenter.z+750);
+  camera.lookAt(courseCenter.x,0,courseCenter.z);
+}
+let overview=false;
+document.getElementById("overviewBtn").onclick=()=>{
+  overview=!overview;
+  document.getElementById("overviewBtn").textContent=overview?"返回球位":"俯瞰全场";
+  if(!overview&&state==="aim")aimCam();
+};
+/* 大字 */
+const bigEl=document.getElementById("big");
+let bigTimer=null;
+function showBig(label,num,unit,sub,gold,holdMs){
+  document.getElementById("bigLabel").textContent=label;
+  document.getElementById("bigNum").textContent=num;
+  document.getElementById("bigUnit").textContent=unit;
+  document.getElementById("bigSub").textContent=sub||"";
+  bigEl.classList.toggle("gold",!!gold);
+  bigEl.classList.add("show");
+  clearTimeout(bigTimer);
+  if(holdMs)bigTimer=setTimeout(()=>bigEl.classList.remove("show"),holdMs);
+}
+/* 挥杆 */
+document.getElementById("swingBtn").onclick=doSwing;
+addEventListener("keydown",e=>{if(e.code==="Space"&&state==="aim"){e.preventDefault();doSwing();}});
+function doSwing(){
+  if(state!=="aim")return;
+  const power=+document.getElementById("power").value/100;
+  const aimDeg=+document.getElementById("aim").value;
+  fire(ballPos,clubIdx,power,aimDeg);
+}
+let flight=null;
+function fire(from,ci,power,aimDeg){
+  state="flight"; flyCamPos=null; camMode="flight";
+  document.getElementById("swingBtn").disabled=true;
+  trailReset(); sfxShot();
+  lastShotFrom={...from};
+  const r=simulate(from,ci,power,aimDeg);
+  flight={r,i:0,dt:1/60};
+}
+function finishFlight(){
+  const r=flight.r; flight=null;
+  strokes++;
+  const shotYds=Math.round(M2Y(Math.hypot(r.end.x-lastShotFrom.x,r.end.z-lastShotFrom.z)));
+  ballPos={x:r.end.x,y:r.end.y,z:r.end.z};
+  if(r.water){
+    sfxWaterS();
+    showBig("WATER","+1","PEN","罚 1 杆 · 回到原位",false,2600);
+    strokes++; // 罚杆
+    setTimeout(()=>{
+      ballPos={...lastShotFrom};
+      ball.position.set(ballPos.x,ballPos.y,ballPos.z);
+      aimBase=dirBetween(ballPos,cur.pin);
+      state="aim";camMode="aim";trailReset();updateHUD();updateAimLine();
+      document.getElementById("swingBtn").disabled=false;
+    },2700);
+    return;
+  }
+  sfxLand();
+  if(r.holed){
+    sfxHole();
+    const diff=strokes-cur.par;
+    const label=strokes===1?"HOLE IN ONE!":diff<=-3?"ALBATROSS":diff===-2?"EAGLE":diff===-1?"BIRDIE":diff===0?"PAR":diff===1?"BOGEY":diff===2?"DOUBLE":"+"+diff;
+    showBig(label,strokes,strokes>1?"STROKES":"STROKE",`PAR ${cur.par} · 第 ${holeIdx+1} 洞完成`,true,2800);
+    scores.push({strokes,par:cur.par});
+    renderScorecard();
+    setTimeout(()=>{
+      bigEl.classList.remove("show");
+      if(holeIdx<17){setHole(holeIdx+1);startBrief();}
+      else{showBig("ROUND COMPLETE",scores.reduce((a,s)=>a+s.strokes,0),"TOTAL",scoreDiffTxt(),true,0);
+        document.getElementById("scorecard").classList.add("open");state="done";}
+    },2900);
+    return;
+  }
+  // 未进洞：下一杆
+  aimBase=dirBetween(ballPos,cur.pin);
+  const left=Math.round(M2Y(distToPin()));
+  showBig("SHOT",shotYds,"YDS","",false,1800);
+  setTimeout(()=>{
+    showBig("TO PIN",left,"YDS",surfaceCn(surfaceAt(ballPos.x,ballPos.z)),false,1800);
+  },1900);
+  setTimeout(()=>{
+    state="aim";camMode="aim";trailReset();updateHUD();updateAimLine();
+    document.getElementById("swingBtn").disabled=false;
+  },3800);
+}
+function scoreDiffTxt(){
+  const tot=scores.reduce((a,s)=>a+s.strokes,0),par=holes.reduce((a,h)=>a+h.par,0),d=tot-par;
+  return d===0?"EVEN PAR":(d>0?"+"+d:""+d);
+}
+function surfaceCn(s){return {green:"果岭 ON GREEN",fairway:"球道 FAIRWAY",rough:"长草 ROUGH",sand:"沙坑 BUNKER",tee:"发球台",water:""}[s]||s;}
+/* brief 运镜 */
+let briefT=0;
+function startBrief(){
+  state="brief";camMode="brief";briefT=0;
+  document.getElementById("skipTip").style.display="block";
+}
+function skipBrief(){
+  if(state!=="brief")return;
+  document.getElementById("skipTip").style.display="none";
+  state="aim";camMode="aim";
+}
+addEventListener("pointerdown",skipBrief);
+addEventListener("keydown",skipBrief);
+/* 记分卡 */
+function renderScorecard(){
+  let html="<tr><th>洞</th>"+holes.map((h,i)=>`<th class="${i===holeIdx?'cur':''}">${i+1}</th>`).join("")+"<th>总</th></tr>";
+  html+="<tr><td>Par</td>"+holes.map(h=>`<td>${h.par}</td>`).join("")+`<td>${holes.reduce((a,h)=>a+h.par,0)}</td></tr>`;
+  html+="<tr><td>杆</td>"+holes.map((h,i)=>{
+    const s=scores[i]; return `<td class="${i===holeIdx?'cur':''}">${s?s.strokes:"—"}</td>`;
+  }).join("")+`<td>${scores.reduce((a,s)=>a+s.strokes,0)||"—"}</td></tr>`;
+  document.getElementById("scoreTbl").innerHTML=html;
+}
+document.getElementById("scoreBtn").onclick=()=>document.getElementById("scorecard").classList.toggle("open");
+/* 控件 */
+document.getElementById("aim").oninput=e=>{document.getElementById("aimV").textContent=(+e.target.value).toFixed(1)+"°";updateAimLine();if(state==="aim"&&camMode==="aim")aimCam();};
+document.getElementById("power").oninput=e=>document.getElementById("powerV").textContent=e.target.value+"%";
+document.getElementById("clubDown").onclick=()=>{clubIdx=Math.max(0,clubIdx-1);document.getElementById("clubV").textContent=CLUBS[clubIdx].n;};
+document.getElementById("clubUp").onclick=()=>{clubIdx=Math.min(CLUBS.length-1,clubIdx+1);document.getElementById("clubV").textContent=CLUBS[clubIdx].n;};
+/* 阴影相机跟随当前洞 */
+function syncShadow(){
+  const cx=(ballPos.x+cur.pin.x)/2, cz=(ballPos.z+cur.pin.z)/2;
+  sun.position.set(cx-500,700,cz+350);
+  sun.target.position.set(cx,0,cz);
+  sun.target.updateMatrixWorld();
+}
+/* ============ 主循环 ============ */
+const clock=new THREE.Clock();
+function loop(){
+  requestAnimationFrame(loop);
+  const dt=Math.min(0.05,clock.getDelta());
+  if(overview){overviewCam();}
+  else if(camMode==="brief"){briefT+=dt;briefCam(briefT);if(briefT>3.2)skipBrief();}
+  else if(camMode==="aim"){aimCam();}
+  else if(camMode==="flight"){
+    if(flight){
+      flight.dt+=dt;
+      const step=Math.floor(flight.dt/(1/60));
+      for(let k=0;k<step&&flight.i<flight.r.pts.length;k++){
+        const p=flight.r.pts[flight.i++];
+        ball.position.set(p.x,p.y,p.z);
+        trailPush(p);
+      }
+      flight.dt-=step/60;
+      if(flight.i>=flight.r.pts.length)finishFlight();
+    }
+    flyCam();
+  }
+  // 旗子轻摆
+  const t=performance.now()/1000;
+  pins.forEach((f,i)=>{f.rotation.y=Math.sin(t*1.3+i)*0.3;});
+  renderer.render(scene,camera);
+}
+/* ============ 启动 ============ */
+const loadBar=document.getElementById("loadBar"),loadTip=document.getElementById("loadTip");
+function boot(){
+  loadTip.textContent="生成地形与球道…";loadBar.style.width="15%";
+  setTimeout(()=>{
+    buildTerrain();loadBar.style.width="55%";loadTip.textContent="种植树木与障碍…";
+    setTimeout(()=>{
+      buildWaters();buildTrees();buildMarkers();buildClubhouse();buildClouds();
+      loadBar.style.width="90%";loadTip.textContent="就绪";
+      setTimeout(()=>{
+        document.getElementById("loading").style.display="none";
+        setHole(0);renderScorecard();startBrief();loop();
+      },150);
+    },30);
+  },30);
+}
+boot();
+/* ============ 探针（测试用） ============ */
+window.__info=()=>({state,hole:holeIdx+1,strokes,distToPin:distToPin(),holes:holes.length,par:holes.reduce((a,h)=>a+h.par,0)});
+window.__forceShot=(o={})=>{
+  if(state==="brief")skipBrief();
+  if(state!=="aim")return false;
+  const power=o.power??0.95, aimDeg=o.aim??0;
+  if(o.club!=null)clubIdx=o.club;
+  fire(ballPos,clubIdx,power,aimDeg); return true;
+};
+window.__skip=skipBrief;
+window.__setHole=i=>{setHole(i);startBrief();};
+window.__estCarry=()=>CLUBS.map(c=>({n:c.n,carry:Math.round(estCarry(c))}));
+window.__debugShot=(o={})=>{ // 诊断：同步跑一遍模拟并返回摘要
+  const power=o.power??0.95, ci=o.club??clubIdx, aim=o.aim??0;
+  const from=o.from??ballPos;
+  const r=simulate(from,ci,power,aim);
+  return {club:CLUBS[ci].n, n:r.pts.length, carry:Math.round(r.carry), water:r.water,
+    holed:r.holed, surface:r.surface,
+    end:{x:+r.end.x.toFixed(1),y:+r.end.y.toFixed(1),z:+r.end.z.toFixed(1)},
+    start:{x:+from.x.toFixed(1),y:+from.y.toFixed(1),z:+from.z.toFixed(1)},
+    apex:+Math.max(...r.pts.slice(0,200).map(p=>p.y)).toFixed(1)};
+};
+window.__groundHeight=groundHeight;
+window.__surfaceAt=surfaceAt;
+</script>
+</body>
+</html>
