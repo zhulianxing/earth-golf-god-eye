@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EARTH GOLF · P2</title>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.122.0/Widgets/widgets.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cesium/1.122.0/Cesium.js"></script>
+<script src="land.js"></script><!-- Natural Earth 110m 陆地多边形（水陆判定用，构建时内联） -->
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#05080c;
+    font-family:"SF Pro Text","PingFang SC",system-ui,sans-serif; color:#d7f5e3; }
+  #cesiumContainer { position:absolute; inset:0; transition:filter .35s; }
+  #cesiumContainer.nvg  { filter:brightness(1.15) sepia(1) hue-rotate(72deg) saturate(3.2) brightness(.85); }
+  #cesiumContainer.flir { filter:grayscale(1) invert(1) hue-rotate(185deg) contrast(1.25); }
+
+  .hud { position:absolute; z-index:10; background:rgba(8,14,18,.82); border:1px solid rgba(50,240,140,.35);
+    border-radius:10px; padding:10px 14px; backdrop-filter:blur(4px); }
+  .hud .cap { font-size:11px; letter-spacing:.12em; color:#5ad395; text-transform:uppercase; }
+  .hud .big { font-size:15px; font-weight:600; color:#eafff2; }
+  .mono { font-family:"JetBrains Mono",ui-monospace,Menlo,monospace; }
+
+  #topbar { top:0; left:0; right:0; border-radius:0; border-left:0; border-right:0; border-top:0;
+    display:flex; align-items:center; gap:14px; padding:8px 16px; }
+  #topbar .logo { font-weight:700; letter-spacing:.2em; color:#32f08c; font-size:15px; }
+  #topbar .sub { font-size:12px; color:#7fa68d; }
+
+  #windHud { top:64px; left:14px; width:138px; text-align:center; }
+  #caddyHud { top:216px; left:14px; max-width:250px; }
+  #caddyList { font-size:12px; line-height:1.9; color:#b9e8cc; }
+  #caddyList .shot { color:#eafff2; }
+  #windArrow { width:44px; height:44px; margin:4px auto 2px; }
+  #windArrowSvg { transition:transform .3s; transform-origin:50% 50%; }
+  #windSrc { font-size:10px; color:#7fa68d; margin-top:2px; }
+  #windSrc.live { color:#32f08c; }
+
+  #holeHud { top:64px; right:14px; min-width:210px; }
+  #holeHud .row { display:flex; justify-content:space-between; gap:12px; font-size:13px; margin-top:3px; }
+  #holeHud .row b { color:#eafff2; font-weight:600; }
+
+  #filterHud { top:258px; right:14px; display:flex; flex-direction:column; gap:6px; padding:8px; }
+  .fbtn { background:transparent; border:1px solid rgba(50,240,140,.35); color:#8fd9ae; border-radius:6px;
+    padding:5px 10px; font-size:12px; cursor:pointer; letter-spacing:.08em; }
+  .fbtn.on { background:rgba(50,240,140,.16); color:#eafff2; border-color:#32f08c; }
+  .fbtn:hover { border-color:#32f08c; }
+
+  #aimHud { left:50%; transform:translateX(-50%); bottom:132px; display:flex; align-items:center; gap:12px; }
+  #aimHud input[type=range] { width:220px; accent-color:#32f08c; }
+
+  #swingHud { left:50%; transform:translateX(-50%); bottom:14px; display:flex; align-items:flex-end; gap:16px; }
+  .sliders { display:grid; grid-template-columns:repeat(4,auto); gap:4px 14px; }
+  .sliders label { font-size:11px; color:#7fa68d; display:flex; flex-direction:column; gap:2px; }
+  .sliders input[type=range] { width:110px; accent-color:#32f08c; }
+  .sliders .val { color:#eafff2; font-size:12px; }
+  #swingBtn { background:#0fdc78; border:0; color:#004d26; font-weight:700; letter-spacing:.15em;
+    padding:12px 26px; border-radius:8px; font-size:15px; cursor:pointer; }
+  #swingBtn:disabled { opacity:.35; cursor:not-allowed; }
+  #imuBtn, #phoneBtn { background:transparent; border:1px solid rgba(50,240,140,.35); color:#8fd9ae;
+    padding:8px 12px; border-radius:8px; font-size:12px; cursor:pointer; }
+  #imuBtn.live, #phoneBtn.live { border-color:#32f08c; color:#eafff2; background:rgba(50,240,140,.16); }
+
+  #result { left:50%; top:50%; transform:translate(-50%,-50%); text-align:center; min-width:320px; display:none; }
+  #result .dist { font-size:34px; font-weight:700; color:#32f08c; font-family:"JetBrains Mono",monospace; }
+  #result .stats { font-size:12px; color:#7fa68d; margin:8px 0 14px; line-height:1.8; }
+  #result button { margin:0 6px; }
+
+  #toast { left:50%; top:80px; transform:translateX(-50%); display:none; font-size:13px; color:#ffd9a0;
+    border-color:rgba(239,170,23,.5); }
+
+  #ready { left:50%; top:42%; transform:translate(-50%,-50%); display:none; opacity:0; background:none; border:0;
+    font-size:30px; font-weight:700; letter-spacing:.35em; color:#32f08c;
+    text-shadow:0 0 20px rgba(50,240,140,.7); pointer-events:none; }
+  #ready .sub { display:block; font-size:15px; font-weight:600; letter-spacing:.05em; color:#eafff2;
+    margin-top:12px; text-shadow:0 0 12px rgba(50,240,140,.6); }
+
+  #broadcast { left:14px; bottom:14px; display:none; padding:10px 16px; border-left:4px solid #e8463a; min-width:300px; }
+  #broadcast .bLive { color:#e8463a; font-size:11px; font-weight:700; letter-spacing:.15em; }
+  #bTitle { font-size:12px; color:#5ad395; letter-spacing:.12em; font-family:"JetBrains Mono",monospace; }
+  #bName { font-size:19px; font-weight:700; color:#eafff2; margin:2px 0; }
+  #bClub { font-size:13px; font-weight:600; color:#ffd76a; margin:3px 0; }
+  #bNote { font-size:12px; color:#b9e8cc; max-width:330px; line-height:1.6; }
+
+  /* 本杆结果（大字）：真实击球距离 → 剩余距洞 → 成绩 */
+  #shotBig { position:absolute; z-index:12; left:50%; top:12%; transform:translateX(-50%);
+    text-align:center; pointer-events:none; display:none; opacity:0; transition:opacity .45s; }
+  #shotBig .sbLine { font-size:44px; font-weight:800; line-height:1.25; letter-spacing:.02em; color:#eafff2;
+    text-shadow:0 0 30px rgba(50,240,140,.55),0 3px 12px rgba(0,0,0,.9); }
+  #shotBig .sbLine b { font-size:1.2em; color:#32f08c; }
+  #shotBig .tag { font-size:17px; font-weight:700; letter-spacing:.34em; color:#b9e8cc; margin-right:12px;
+    text-shadow:0 0 14px rgba(50,240,140,.5),0 2px 8px rgba(0,0,0,.9); }
+  #shotBig .unit { font-size:20px; font-weight:700; letter-spacing:.2em; color:#b9e8cc; margin-left:12px;
+    text-shadow:0 0 14px rgba(50,240,140,.5),0 2px 8px rgba(0,0,0,.9); }
+  #shotBig .sbScore { font-size:36px; font-weight:800; margin-top:14px; letter-spacing:.12em; color:#ffd76a;
+    text-shadow:0 0 26px rgba(255,215,106,.6),0 3px 12px rgba(0,0,0,.9); }
+  #shotBig .sbScore b { color:#ffd76a; }
+  /* 每洞结算大字成绩层 */
+  #holeScore { position:absolute; z-index:13; left:50%; top:33%; transform:translateX(-50%);
+    text-align:center; pointer-events:none; display:none; opacity:0; transition:opacity .45s; }
+  #holeScore .hsLabel { font-size:64px; font-weight:900; letter-spacing:.1em; color:#ffd76a;
+    text-shadow:0 0 34px rgba(255,215,106,.65),0 4px 14px rgba(0,0,0,.9); }
+  #holeScore .hsPts { font-size:44px; font-weight:800; margin-top:10px; color:#eafff2;
+    text-shadow:0 0 26px rgba(50,240,140,.5),0 3px 12px rgba(0,0,0,.9); }
+  #holeScore .hsDetail { font-size:20px; font-weight:700; letter-spacing:.3em; margin-top:12px; color:#b9e8cc;
+    text-shadow:0 2px 8px rgba(0,0,0,.9); }
+
+  /* 每洞开场大字：第几洞 + 中英文洞名 */
+  #holeBanner { position:absolute; z-index:11; left:50%; top:36%; transform:translate(-50%,-50%);
+    text-align:center; pointer-events:none; opacity:0; transition:opacity .6s; }
+  #holeBanner .hbNum { font-size:17px; letter-spacing:.5em; color:#32f08c;
+    text-shadow:0 0 16px rgba(50,240,140,.8); }
+  #holeBanner .hbName { font-size:54px; font-weight:800; line-height:1.15; color:#eafff2; letter-spacing:.03em;
+    margin:10px 0 6px; text-shadow:0 0 34px rgba(50,240,140,.55),0 3px 12px rgba(0,0,0,.85); }
+  #holeBanner .hbRoute { font-size:17px; color:#b9e8cc; letter-spacing:.06em; text-shadow:0 0 12px rgba(0,0,0,.9); }
+  #skipHint { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); z-index:40;
+    display:none; color:#eafff2; font-size:14px; letter-spacing:.18em; padding:8px 18px;
+    background:rgba(10,18,24,.55); border:1px solid rgba(255,215,106,.5); border-radius:20px;
+    animation:skipPulse 1.6s ease-in-out infinite; pointer-events:none; }
+  @keyframes skipPulse { 0%,100% { opacity:.45 } 50% { opacity:1 } }
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+
+<div id="topbar" class="hud">
+  <span class="logo">EARTH GOLF</span>
+  <span class="sub">P2 · 世界巡回 18 洞</span>
+  <span class="sub mono" id="stateTxt">BRIEF</span>
+  <button id="muteBtn" class="fbtn on" style="margin-left:auto">🔊 音效</button>
+</div>
+
+<div id="windHud" class="hud">
+  <div class="cap">Wind 风场</div>
+  <div id="windArrow">
+    <svg id="windArrowSvg" viewBox="0 0 44 44" width="44" height="44">
+      <circle cx="22" cy="22" r="20" fill="none" stroke="rgba(50,240,140,.3)" stroke-width="1"/>
+      <path d="M22 8 L27 26 L22 22 L17 26 Z" fill="#32f08c"/>
+    </svg>
+  </div>
+  <div class="big mono" id="windTxt">--</div>
+  <div id="windSrc">静态风</div>
+</div>
+
+<div id="caddyHud" class="hud">
+  <div class="cap">Caddy 击球攻略</div>
+  <div id="caddyList">--</div>
+</div>
+
+<div id="holeHud" class="hud">
+  <div class="cap">Hole Card 洞卡</div>
+  <div class="row"><span>洞</span><b id="hName">--</b></div>
+  <div class="row"><span>距离</span><b class="mono" id="hDist">--</b></div>
+  <div class="row"><span>Par</span><b class="mono" id="hPar">--</b></div>
+  <div class="row"><span>果岭 / 洞杯</span><b class="mono" id="hCup">--</b></div>
+  <div class="row"><span>球童建议</span><b id="hCaddie" style="font-weight:400;font-size:12px;max-width:200px;text-align:right">--</b></div>
+  <div class="row"><span>地球实际</span><b class="mono" id="hReal">--</b></div>
+  <div class="row"><span>本洞杆数</span><b class="mono" id="hStrokes">0</b></div>
+  <div class="row"><span>地形</span><b id="hTerrain">--</b></div>
+  <div class="row"><span>进度</span><b class="mono" id="hProg">1 / 9</b></div>
+  <div class="row"><span>累计分</span><b class="mono" id="hScore">0</b></div>
+</div>
+
+<div id="filterHud" class="hud">
+  <button class="fbtn on" data-f="">STD 标准</button>
+  <button class="fbtn" data-f="nvg">NVG 夜视</button>
+  <button class="fbtn" data-f="flir">FLIR 热成像</button>
+</div>
+
+<div id="aimHud" class="hud">
+  <span class="cap">瞄准方位修正</span>
+  <input type="range" id="aimSlider" min="-15" max="15" step="0.5" value="0">
+  <span class="mono" id="aimVal">0.0°</span>
+</div>
+
+<div id="swingHud" class="hud">
+  <div class="sliders">
+    <label>杆速 <span class="val mono" id="vCs">42 m/s</span>
+      <input type="range" id="sCs" min="5" max="60" step="1" value="42"></label>
+    <label>杆面角 <span class="val mono" id="vFace">0°</span>
+      <input type="range" id="sFace" min="-15" max="15" step="0.5" value="0"></label>
+    <label>路径角 <span class="val mono" id="vPath">0°</span>
+      <input type="range" id="sPath" min="-10" max="10" step="0.5" value="0"></label>
+    <label>击球角 <span class="val mono" id="vAtk">0°</span>
+      <input type="range" id="sAtk" min="-8" max="8" step="0.5" value="0"></label>
+  </div>
+  <button id="swingBtn">挥 杆</button>
+  <button id="imuBtn">连接 IMU</button>
+  <button id="phoneBtn">📱 手机球杆</button>
+  <button id="replayBtn">↺ 回放</button>
+</div>
+
+<div id="result" class="hud">
+  <div class="cap">Round 成绩</div>
+  <div class="dist" id="rDist">--</div>
+  <div class="stats mono" id="rStats"></div>
+</div>
+
+<div id="toast" class="hud"></div>
+
+<div id="ready" class="hud">READY</div>
+
+<div id="shotBig">
+  <div class="sbLine" id="sbHit">--</div>
+  <div class="sbLine" id="sbRemain" style="display:none">--</div>
+  <div class="sbScore" id="sbScore" style="display:none">--</div>
+</div>
+<div id="holeScore"><div class="hsLabel" id="hsLabel">--</div><div class="hsPts" id="hsPts">--</div><div class="hsDetail" id="hsDetail">--</div></div>
+
+<div id="holeBanner">
+  <div class="hbNum" id="hbNum">第 1 洞</div>
+  <div class="hbName" id="hbName">--</div>
+  <div class="hbRoute" id="hbRoute">--</div>
+</div>
+
+<div id="broadcast" class="hud">
+  <div class="bLive">● LIVE · EARTH GOLF TOUR</div>
+  <div id="bTitle"></div>
+  <div id="bName"></div>
+  <div id="bClub"></div>
+  <div id="bNote"></div>
+</div>
+
+<div id="skipHint">点击任意处跳过 ▸</div>
+
+<script>
+"use strict";
+/* ============================================================
+ * EARTH GOLF · P1
+ * 新增：9 洞巡回 / 地形材质滚动 / 海拔密度 / Open-Meteo 实时风
+ *       杆速→carry 对数标定 / WIT WT9011DCL BLE 输入层(脚手架)
+ * 探针：window.__egolfForceShot / __egolfSetHole / __egolfInfo
+ * ============================================================ */
+
+const DEG = Math.PI / 180;
+const R_EARTH = 6371000;
+
+/* ---------- 关卡数据：世界巡回 9 洞 ---------- */
+const TERRAIN = {
+  fairway:   { name: "标准草地", mu: 0.45 },
+  sand:      { name: "沙漠",     mu: 1.80 },
+  rainforest:{ name: "雨林",     mu: 2.00 },
+  mountain:  { name: "高原",     mu: 0.40 },
+  links:     { name: "海滨",     mu: 0.50 },
+  ice:       { name: "冰川",     mu: 0.25 }
+};
+const HOLES = [
+  { id: 1,  name: "外滩 → 西湖",           en: "The Bund",               pen: "West Lake",            tee: [121.4900, 31.2400],   pin: [120.1450, 30.2400],   par: 3, terrain: "fairway",    wind: { dir: 60,  speed: 8  }, filter: "" },
+  { id: 2,  name: "埃菲尔铁塔 → 大本钟",   en: "Eiffel Tower",           pen: "Big Ben",              tee: [2.2945, 48.8584],     pin: [-0.1246, 51.5007],    par: 4, terrain: "fairway",    wind: { dir: 300, speed: 10 }, filter: "" },
+  { id: 3,  name: "东京塔 → 富士山",       en: "Tokyo Tower",            pen: "Mount Fuji",           tee: [139.7454, 35.6586],   pin: [138.7274, 35.3606],   par: 3, terrain: "mountain",   wind: { dir: 180, speed: 6  }, filter: "", elevM: 1500 },
+  { id: 4,  name: "自由女神像 → 国会山",   en: "Statue of Liberty",      pen: "Capitol Hill",         tee: [-74.0445, 40.6892],   pin: [-77.0090, 38.8899],   par: 4, terrain: "fairway",    wind: { dir: 90,  speed: 12 }, filter: "" },
+  { id: 5,  name: "吉萨金字塔 → 佩特拉古城", en: "Great Pyramid of Giza", pen: "Petra",              tee: [31.1342, 29.9792],    pin: [35.4444, 30.3285],    par: 4, terrain: "sand",       wind: { dir: 90,  speed: 10 }, filter: "" },
+  { id: 6,  name: "悉尼歌剧院 → 联邦广场",   en: "Sydney Opera House",   pen: "Federation Square",    tee: [151.2153, -33.8568],  pin: [144.9679, -37.8180],  par: 5, terrain: "links",      wind: { dir: 220, speed: 14 }, filter: "" },
+  { id: 7,  name: "里约基督像 → 圣保罗",   en: "Christ the Redeemer",    pen: "São Paulo",            tee: [-43.2105, -22.9519],  pin: [-46.6330, -23.5500],  par: 4, terrain: "rainforest", wind: { dir: 140, speed: 8  }, filter: "" },
+  { id: 8,  name: "哈利法塔 → 海上卢浮宫", en: "Burj Khalifa",           pen: "Louvre Abu Dhabi",     tee: [55.2744, 25.1972],    pin: [54.3980, 24.5010],    par: 3, terrain: "sand",       wind: { dir: 320, speed: 9  }, filter: "flir" },
+  { id: 9,  name: "红场 → 冬宫",           en: "Red Square",             pen: "Winter Palace",        tee: [37.6189, 55.7539],    pin: [30.3145, 59.9398],    par: 5, terrain: "fairway",    wind: { dir: 200, speed: 9  }, filter: "" },
+  { id: 10, name: "大本钟 → 三一学院",     en: "Big Ben",                pen: "Trinity College",      tee: [-0.1246, 51.5007],    pin: [-6.2546, 53.3438],    par: 4, terrain: "links",      wind: { dir: 280, speed: 13 }, filter: "" },
+  { id: 11, name: "威基基 → 冒纳凯阿",     en: "Waikiki",                pen: "Mauna Kea",            tee: [-157.8260, 21.2850],  pin: [-155.4680, 19.8210],  par: 4, terrain: "mountain",   wind: { dir: 80,  speed: 11 }, filter: "", elevM: 1500 },
+  { id: 12, name: "马德里皇宫 → 圣家堂",   en: "Royal Palace of Madrid", pen: "Sagrada Família",      tee: [-3.7140, 40.4180],    pin: [2.1744, 41.4036],     par: 4, terrain: "fairway",    wind: { dir: 240, speed: 10 }, filter: "" },
+  { id: 13, name: "泰姬陵 → 风之宫殿",     en: "Taj Mahal",              pen: "Hawa Mahal",           tee: [78.0421, 27.1751],    pin: [75.8267, 26.9239],    par: 3, terrain: "sand",       wind: { dir: 100, speed: 10 }, filter: "" },
+  { id: 14, name: "曼谷大皇宫 → 吴哥窟",   en: "Grand Palace",           pen: "Angkor Wat",           tee: [100.4920, 13.7500],   pin: [103.8670, 13.4125],   par: 4, terrain: "rainforest", wind: { dir: 120, speed: 5  }, filter: "" },
+  { id: 15, name: "罗马斗兽场 → 雅典卫城", en: "Colosseum",              pen: "Acropolis",            tee: [12.4922, 41.8902],    pin: [23.7257, 37.9715],    par: 5, terrain: "links",      wind: { dir: 320, speed: 12 }, filter: "flir" },
+  { id: 16, name: "哈尔格林姆 → 黄金瀑布", en: "Hallgrímskirkja",        pen: "Gullfoss",             tee: [-21.9266, 64.1417],   pin: [-20.1250, 64.3270],   par: 3, terrain: "ice",        wind: { dir: 190, speed: 12 }, filter: "nvg" },
+  { id: 17, name: "桌山 → 赫曼努斯",       en: "Table Mountain",         pen: "Hermanus",             tee: [18.4099, -33.9628],   pin: [19.2300, -34.4200],   par: 3, terrain: "links",      wind: { dir: 160, speed: 20 }, filter: "" },
+  { id: 18, name: "帝国大厦 → 金门大桥",   en: "Empire State Building",  pen: "Golden Gate Bridge",   tee: [-73.9857, 40.7484],   pin: [-122.4783, 37.8199],  par: 8, terrain: "fairway",    wind: { dir: 270, speed: 15 }, filter: "" }
+];
+/* 洞名显示：第N洞 · 中文地标 英文地标 */
+const landCN = h => (h.name.split("→")[0] || h.name).trim();
+const landEN = h => (h.en || "").trim();
+const destCN = h => (h.name.split("→")[1] || h.name).trim();
+const destEN = h => (h.pen || "").trim();
+const holeTitle = h => "第" + h.id + "洞 · " + landCN(h) + " " + landEN(h);
+const holeRoute = h => landCN(h) + " " + landEN(h) + " → " + destCN(h) + " " + destEN(h);
+let holeIndex = 0;
+let curHole = HOLES[0];
+let totalScore = 0;
+let holeScores = [];
+
+/* PGA 风格解说词（转播字幕条用） */
+const HOLE_NOTES = {
+  1:  "开局热身洞：外滩开球朝西南打，让滚动替你收尾。",
+  2:  "跨海成名洞：carry 必须越过英吉利海峡，宁大勿小。",
+  3:  "短洞考精准：洞杯在富士山腰，宁可短不可偏。",
+  4:  "东海岸走廊：侧风常客，瞄准留好提前量。",
+  5:  "沙漠史诗洞：从金字塔直飞玫瑰古城佩特拉，沙地会替你停球。",
+  6:  "澳洲南海岸马拉松：内陆走廊配信风，五杆之内进墨尔本。",
+  7:  "雨林零滚动：打足码数，一步到位上果岭。",
+  8:  "沙漠短洞：FLIR 热浪里的精准一击。",
+  9:  "东欧长洞：两杆全力开球，别客气。",
+  10: "跨爱尔兰海：侧风带雨，打短了直接喂鱼。",
+  11: "海岛火山洞：海风侧吹，carry 算完再打个折。",
+  12: "西班牙经典：标准球道，老老实实按码数打。",
+  13: "沙漠宫殿洞：沙地停球极快，carry 必须打足码数。",
+  14: "东南亚雨林：丛林不留情，宁长勿偏。",
+  15: "跨爱奥尼亚海：全力一杆越过 170km 海面，卫城在山顶等你。",
+  16: "极光夜场黄金圈：冰面滚动超长，carry 打六成就够。",
+  17: "风暴角观鲸岸：20 m/s 强侧风，相信攻略的修正角。",
+  18: "终局横穿美利坚：4133 km 从纽约打到旧金山，分配好每一杆。"
+};
+
+/* ---------- 球面投影薄层 ---------- */
+function destPoint(lon, lat, brngDeg, distM) {
+  const d = distM / R_EARTH, t = brngDeg * DEG;
+  const p1 = lat * DEG, l1 = lon * DEG;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(t));
+  const l2 = l1 + Math.atan2(Math.sin(t) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return [l2 / DEG, p2 / DEG];
+}
+function bearingOf(lon1, lat1, lon2, lat2) {
+  const p1 = lat1 * DEG, p2 = lat2 * DEG, dl = (lon2 - lon1) * DEG;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) / DEG + 360) % 360;
+}
+function haversineM(lon1, lat1, lon2, lat2) {
+  const p1 = lat1 * DEG, p2 = lat2 * DEG;
+  const a = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin((lon2 - lon1) * DEG / 2) ** 2;
+  return 2 * R_EARTH * Math.asin(Math.sqrt(a));
+}
+
+/* ---------- 水陆判定（射线法，LAND 来自 land.js） ---------- */
+function inPoly(lon, lat, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function isWater(lon, lat) {
+  for (const poly of LAND) {
+    for (const l of [lon, lon - 360, lon + 360]) {   // 处理反经线横跨多边形
+      if (l >= -180 && l <= 180 && inPoly(l, lat, poly)) return false;
+    }
+  }
+  return true;
+}
+
+/* ---------- 杆速→carry 标定 ----------
+   长杆区（默认）：对数标定 5m/s→20km … 20m/s→50km … 60m/s→600km
+   短杆精准区（距洞 ≤26km）：线性细标定 0.42km/(m/s)，cs 0.5-62 覆盖 0.2-26km，
+   甩杆 ±1.5 m/s 的误差只影响 ±0.6km，配合洞杯半径（洞距×0.4%）可正常攻洞 */
+function targetCarryM(clubSpeed, distToPinM) {
+  if (distToPinM != null && distToPinM <= 26000) {
+    return Math.max(200, Math.min(26000, clubSpeed * 420));
+  }
+  const f = Math.min(1, (clubSpeed - 20) / 40);          // 允许 <20 m/s 的轻推区间
+  return 50000 * Math.pow(12, f);                        // 对数拉伸：短杆保精度，长杆有爆发力
+}
+function v0ForCarry(carryM) {
+  return Math.sqrt(carryM * 9.8) * 1.025;    // 无阻力 45° 反解 + 阻力补偿系数（Exec 标定 1.025）
+}
+
+/* ---------- 2D 物理核（TVgolf 积分范式，km 级标定） ---------- */
+function simulate(spec, hole) {
+  const v0 = v0ForCarry(targetCarryM(spec.clubSpeed, spec.distToPinM));
+  const launch = Math.min(70, Math.max(15, 45 + spec.attackAngle * 1.2)) * DEG;
+  const latDeg = spec.faceAngle * 0.75 + spec.pathAngle * 0.25;     // 杆面主导侧偏
+  let vx = v0 * Math.cos(launch), vy = v0 * Math.sin(launch);
+  let vz = v0 * Math.tan(latDeg * DEG);
+  const wA = hole.wind.speed * 0.06;                                // 风→恒定加速度
+  const wAlong = Math.cos(hole.wind.dir * DEG) * wA, wCross = Math.sin(hole.wind.dir * DEG) * wA;
+  const k = 2e-6, g = 9.8, dt = 0.05;
+  const rho0 = Math.exp(-(hole.elevM || 0) / 8500);                 // 高原空气稀薄（珠峰洞飞更远）
+  let x = 0, y = 0, z = 0, t = 0, apex = 0;
+  const samples = [{ t: 0, d: 0, h: 0 }];
+  for (let i = 0; i < 40000; i++) {
+    const rho = rho0 * Math.exp(-y / 8500);
+    const v = Math.hypot(vx, vy, vz) || 1e-6;
+    vx += (-k * rho * v * vx + wAlong) * dt;
+    vy += (-g - k * rho * v * vy) * dt;
+    vz += (-k * rho * v * vz + wCross) * dt;
+    x += vx * dt; y += vy * dt; z += vz * dt; t += dt;
+    if (y > apex) apex = y;
+    if (y <= 0) break;
+    if (i % 4 === 0) samples.push({ t, d: x, h: y });
+  }
+  const vImpact = Math.hypot(vx, vz);
+  const mu = TERRAIN[hole.terrain].mu;                              // 地形材质：沙漠滚远 / 雨林骤停
+  // 滚动上限与 carry 成比例（基准地形 fairway≈15%），否则高初速下滚动 30-60km 摧毁短杆手感
+  const roll = Math.min(vImpact * vImpact / (2 * mu * g), (x * 0.15 + 2000) * (0.45 / mu));
+  const rollT = vImpact / (mu * g);
+  samples.push({ t: t + rollT, d: x + roll, h: 0 });
+  return { carryM: x, rollM: roll, lateralM: z, apexM: apex, flightT: t, rollT, tof: t + rollT, totalD: x + roll, samples };
+}
+
+/* 轨迹里程点（含侧偏）→ 经纬度，与 playFlight 采样公式一致 */
+function pathPoint(o, brg, r, d) {
+  const p = destPoint(o[0], o[1], brg, d);
+  const lat = r.totalD > 0 ? r.lateralM * (d / r.totalD) : 0;
+  return destPoint(p[0], p[1], brg + 90, lat);
+}
+/* 滚动段是否滚过洞杯（落在洞杯半径内）→ 被球洞捕获；只检测落地后的滚动部分 */
+function cupCapture(o, brg, r, hole) {
+  if (!(r.rollM > 0)) return null;
+  const cupM = hole.cupKm * 1000, rollM = r.rollM;
+  const step = Math.max(20, cupM * 0.4);              // 步长 < 洞杯半径，保证不漏检
+  for (let dd = 0; dd <= rollM; dd += step) {
+    const pt = pathPoint(o, brg, r, r.carryM + dd);
+    if (haversineM(pt[0], pt[1], hole.pin[0], hole.pin[1]) <= cupM)
+      return { d: r.carryM + dd, t: r.flightT + (dd / rollM) * r.rollT };
+  }
+  return null;
+}
+
+/* ---------- Open-Meteo 实时风（免 Key，失败回退静态风） ---------- */
+async function fetchRealWind(hole) {
+  try {
+    const mid = destPoint(hole.tee[0], hole.tee[1],
+      bearingOf(hole.tee[0], hole.tee[1], hole.pin[0], hole.pin[1]),
+      haversineM(hole.tee[0], hole.tee[1], hole.pin[0], hole.pin[1]) / 2);
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=" + mid[1].toFixed(3) +
+      "&longitude=" + mid[0].toFixed(3) + "&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=ms";
+    const res = await fetch(url);
+    const j = await res.json();
+    const c = j.current;
+    if (typeof c.wind_speed_10m !== "number") throw new Error("bad payload");
+    // 气象惯例：风向=来风方向；游戏惯例：风吹去方向 → +180°
+    hole.wind = { dir: Math.round((c.wind_direction_10m + 180) % 360), speed: Math.round(c.wind_speed_10m * 10) / 10 };
+    return true;
+  } catch (e) {
+    return false;   // 保留 holes.json 静态风
+  }
+}
+
+/* ---------- WIT WT9011DCL BLE 输入层（P1 脚手架，真机标定待定） ---------- */
+/* 协议：服务 0xFFE5 / 通知 0xFFE4 / 写 0xFFE9，数据帧 0x55 0x61 + 加速度/角速度/角度 */
+const IMU = {
+  device: null, live: false,
+  peakGyro: 0, yawStart: null, swingArmed: false,
+  K_GYRO_TO_CLUBSPEED: 0.05,        // 标定占位：°/s 峰值 → m/s 杆速，真机标定后替换
+  async connect() {
+    if (!navigator.bluetooth) { toast("此浏览器不支持 Web Bluetooth"); return; }
+    try {
+      this.device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: "WT" }],
+        optionalServices: [0xffe5]
+      });
+      const server = await this.device.gatt.connect();
+      const svc = await server.getPrimaryService(0xffe5);
+      const ch = await svc.getCharacteristic(0xffe4);
+      await ch.startNotifications();
+      ch.addEventListener("characteristicvaluechanged", e => this.onData(new DataView(e.target.value.buffer)));
+      this.live = true;
+      const btn = document.getElementById("imuBtn");
+      btn.classList.add("live"); btn.textContent = "IMU 已连接";
+      toast("IMU 已连接 · 挥杆自动触发（标定系数为占位值）", 3600);
+    } catch (e) {
+      toast("IMU 连接失败：" + e.message, 3600);
+    }
+  },
+  onData(dv) {
+    if (dv.getUint8(0) !== 0x55 || dv.getUint8(1) !== 0x61) return;
+    const gx = dv.getInt16(8, true) / 32768 * 2000;    // °/s
+    const gy = dv.getInt16(10, true) / 32768 * 2000;
+    const gz = dv.getInt16(12, true) / 32768 * 2000;
+    const yaw = dv.getInt16(18, true) / 32768 * 180;   // °
+    const gMag = Math.hypot(gx, gy, gz);
+    if (gMag > 250 && !this.swingArmed) {              // 挥杆开始（阈值占位）
+      this.swingArmed = true; this.peakGyro = gMag; this.yawStart = yaw;
+    } else if (this.swingArmed) {
+      if (gMag > this.peakGyro) this.peakGyro = gMag;
+      if (gMag < 120) {                                 // 挥杆结束 → 产出 ShotSpec
+        this.swingArmed = false;
+        let dYaw = yaw - this.yawStart;
+        if (dYaw > 180) dYaw -= 360; if (dYaw < -180) dYaw += 360;
+        const spec = {
+          clubSpeed: Math.min(60, Math.max(5, this.peakGyro * this.K_GYRO_TO_CLUBSPEED)),
+          faceAngle: Math.min(15, Math.max(-15, dYaw * 0.2)),
+          pathAngle: 0, attackAngle: 0, tempo: 1
+        };
+        this.peakGyro = 0;
+        if (state === "aim") commitShot(spec);
+      }
+    }
+  }
+};
+
+/* ---------- Cesium 场景 ---------- */
+Cesium.Ion.defaultAccessToken = "";
+const viewer = new Cesium.Viewer("cesiumContainer", {
+  baseLayer: new Cesium.ImageryLayer(new Cesium.UrlTemplateImageryProvider({
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    credit: "Esri, Maxar, Earthstar Geographics"
+  })),
+  baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+  navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: false,
+  infoBox: false, selectionIndicator: false
+});
+const scene = viewer.scene;
+scene.globe.enableLighting = false;
+// 地名注记图层（Esri Reference：国家/城市/地标名称，叠在卫星影像上）
+viewer.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({
+  url: "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+  credit: "Esri place labels"
+}));
+
+let teeEntity, pinEntity, greenEntity, aimEntity, ballEntity, landEntity;
+let state = "brief";
+let aimAdjust = 0;
+let lastResult = null;
+let holeStrokes = 0, holePenalty = 0;
+let shotOrigin = null;   // 当前击球起点（TEE 或上一杆落点）
+
+function flagCanvas() {
+  const c = document.createElement("canvas"); c.width = 48; c.height = 48;
+  const g = c.getContext("2d");
+  g.strokeStyle = "#eafff2"; g.lineWidth = 3;
+  g.beginPath(); g.moveTo(10, 46); g.lineTo(10, 6); g.stroke();
+  g.fillStyle = "#e8463a";
+  g.beginPath(); g.moveTo(11, 6); g.lineTo(38, 12); g.lineTo(11, 19); g.closePath(); g.fill();
+  return c;
+}
+
+/* ---------- 真实手感参考：游戏码数 → 真实高尔夫码数 + 球杆 ---------- */
+const REAL_EQ = 0.8;   // 1 km ≈ 0.8 真实码（165km Par3 ≈ 132 码的真实手感）
+const CLUB_BANDS = [[245, "一号木"], [225, "3 号木"], [207, "5 号木"], [192, "混合杆"], [180, "4 号铁"],
+  [170, "5 号铁"], [157, "6 号铁"], [145, "7 号铁"], [132, "8 号铁"], [120, "9 号铁"],
+  [107, "P 杆"], [92, "G 杆"], [72, "S 杆"], [45, "L 杆"], [0, "推杆"]];
+function realRef(carryKm) {
+  const ry = Math.round(carryKm * REAL_EQ);
+  for (const b of CLUB_BANDS) if (ry >= b[0]) return { yd: ry, club: b[1] };
+  return { yd: ry, club: "推杆" };
+}
+
+/* ---------- 球童建议 + 击球攻略：码数 / 分杆 / 风修正 ---------- */
+const YD_PER_KM = 1093.61;
+const yd = km => Math.round(km * YD_PER_KM).toLocaleString("en-US");
+const CARRY_FACTOR = { fairway: 0.85, mountain: 0.85, links: 0.85, rainforest: 0.97, sand: 0.70, ice: 0.65 };
+function updateCaddie() {
+  const o = shotOrigin || curHole.tee;
+  const p = curHole.pin;
+  const distKm = haversineM(o[0], o[1], p[0], p[1]) / 1000;
+  const f = CARRY_FACTOR[curHole.terrain] || 0.85;      // 地形滚动系数：沙漠/冰川留更多给滚动
+  const short = distKm <= 26;                           // 短杆精准区：线性细标定 + 反解杆速
+  const maxCarry = short ? 26 : targetCarryM(60) / 1000;
+  const minCarry = short ? 0.2 : targetCarryM(5) / 1000;
+  const csFor = c => short
+    ? Math.min(62, Math.max(1, Math.max(c, minCarry) * 1000 / 420))
+    : Math.min(60, Math.max(5, 20 + 40 * Math.log(Math.max(c, minCarry) * 1000 / 50000) / Math.log(12)));
+  const carry = distKm * f;
+  const pinRR = realRef(distKm), rr = realRef(Math.max(carry, minCarry));   // 真实击球转换（码数 + 球杆）
+  // 洞卡一行建议：真实转换码数为主，附球杆与杆速
+  let tip;
+  if (carry > maxCarry) tip = "距洞 ≈真实 " + pinRR.yd + " 码 · 一趟打不到，需分杆（见攻略）";
+  else tip = "距洞 ≈真实 " + pinRR.yd + " 码 · 用 " + rr.club + " 打 ≈真实 " + rr.yd +
+    " 码（杆速约 " + csFor(carry).toFixed(0) + " m/s" + (carry < minCarry ? "，轻推到位" : "") + "）";
+  document.getElementById("hCaddie").textContent = tip;
+  document.getElementById("hReal").textContent = "地球 " + yd(distKm) + " 码 · " + distKm.toFixed(1) + " km";
+  // 分杆攻略（码数为主，括号附 carry km / 杆速）
+  const plan = [];
+  let remain = distKm, n = 1;
+  while (remain * f > maxCarry && n < 10) {
+    plan.push("第 " + n + " 杆：全力开球 60 m/s（预计推进约 " + yd(maxCarry / f) + " 码含滚动）");
+    remain -= maxCarry / f; n++;
+  }
+  const cLast = remain * f;
+  if (remain <= curHole.greenKm) plan.push("已在果岭范围内：上果岭即算进洞，轻推收杆（≈真实 " + realRef(minCarry).yd + " 码）");
+  else plan.push("第 " + n + " 杆 · 攻果岭：打 " + yd(Math.max(cLast, minCarry)) + " 码（carry " +
+    Math.max(cLast, minCarry).toFixed(1) + " km / 杆速约 " + csFor(cLast).toFixed(0) + " m/s / ≈真实 " +
+    realRef(Math.max(cLast, minCarry)).yd + " 码·" + realRef(Math.max(cLast, minCarry)).club + "）" +
+    (cLast < minCarry ? "，轻推到位" : ""));
+  // 风修正（风向=吹去方向，相对航线分解）
+  const brg = bearingOf(o[0], o[1], p[0], p[1]);
+  const rel = ((curHole.wind.dir - brg + 540) % 360) - 180;
+  const along = Math.cos(rel * DEG) * curHole.wind.speed;   // + 顺风
+  const cross = Math.sin(rel * DEG) * curHole.wind.speed;   // + 右侧风
+  if (Math.abs(along) >= 3) plan.push("🌬 " + (along > 0 ? "顺风" : "逆风") + " " + Math.abs(along).toFixed(0) +
+    " m/s → 杆速" + (along > 0 ? "减" : "加") + "约 " + Math.abs(along * 0.4).toFixed(0));
+  if (Math.abs(cross) >= 3) plan.push("🌬 " + (cross > 0 ? "右侧风" : "左侧风") + " " + Math.abs(cross).toFixed(0) +
+    " m/s → 瞄准向" + (cross > 0 ? "左" : "右") + "修约 " + Math.abs(cross * 0.4).toFixed(1) + "°");
+  document.getElementById("caddyList").innerHTML =
+    plan.map((t, i) => "<div class='" + (i < n ? "shot" : "") + "'>" + t + "</div>").join("");
+}
+
+/* ---------- 球道图：球道走廊 / 水障碍 / 码数标记 / 洞杯环 ---------- */
+let courseEntities = [];
+function buildCourseMap(hole) {
+  courseEntities.forEach(e => viewer.entities.remove(e));
+  courseEntities = [];
+  const [tLon, tLat] = hole.tee, [pLon, pLat] = hole.pin;
+  const brg = bearingOf(tLon, tLat, pLon, pLat);
+  const dist = haversineM(tLon, tLat, pLon, pLat);
+  const widthM = Math.max(hole.greenKm * 2000, 16000);          // 球道走廊宽 ≈ 果岭直径
+  const N = Math.min(120, Math.max(30, Math.round(dist / 10000)));
+  const pts = [], waterPts = [];
+  for (let i = 0; i <= N; i++) {
+    const p = destPoint(tLon, tLat, brg, dist * i / N);
+    pts.push(Cesium.Cartesian3.fromDegrees(p[0], p[1], 400));
+    if (isWater(p[0], p[1])) waterPts.push({ i, p });
+  }
+  const add = e => { courseEntities.push(e); return viewer.entities.add(e); };
+  // 球道走廊（半透明绿地毯）
+  add({ corridor: { positions: pts, width: widthM, cornerType: Cesium.CornerType.ROUND,
+    material: Cesium.Color.fromCssColorString("#0fdc78").withAlpha(0.10),
+    outline: true, outlineColor: Cesium.Color.fromCssColorString("#0fdc78").withAlpha(0.35) } });
+  // 水障碍区段（连续水样点连成蓝色走廊）
+  let run = [];
+  const flush = () => {
+    if (run.length > 1) add({ corridor: { positions: run.map(w => Cesium.Cartesian3.fromDegrees(w.p[0], w.p[1], 500)),
+      width: widthM, cornerType: Cesium.CornerType.ROUND,
+      material: Cesium.Color.fromCssColorString("#3fa8ff").withAlpha(0.30) } });
+    run = [];
+  };
+  for (const w of waterPts) { if (run.length && w.i !== run[run.length - 1].i + 1) flush(); run.push(w); }
+  flush();
+  // 码数标记（每 100 km，像球道上的码数桩）
+  for (let d = 100000; d < dist - 60000; d += 100000) {
+    const p = destPoint(tLon, tLat, brg, d);
+    add({ position: Cesium.Cartesian3.fromDegrees(p[0], p[1], 600),
+      point: { pixelSize: 6, color: Cesium.Color.WHITE.withAlpha(0.9), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: Math.round(d / 1000) + "", font: "11px monospace", fillColor: Cesium.Color.WHITE,
+        pixelOffset: new Cesium.Cartesian2(0, -14), showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString("#0a1218aa"),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY } });
+  }
+  // 洞杯环（金色，进洞判定圈）
+  add({ position: Cesium.Cartesian3.fromDegrees(pLon, pLat, 600),
+    ellipse: { semiMajorAxis: hole.cupKm * 1000, semiMinorAxis: hole.cupKm * 1000,
+      material: Cesium.Color.fromCssColorString("#ffd76a").withAlpha(0.35),
+      outline: true, outlineColor: Cesium.Color.fromCssColorString("#ffd76a") } });
+}
+
+/* ---------- 开球前鸟瞰：发球台 → 球道 → 果岭 → 击球视角 ---------- */
+function flyoverIntro(hole, distKm, onDone) {
+  const [tLon, tLat] = hole.tee, [pLon, pLat] = hole.pin;
+  const brg = bearingOf(tLon, tLat, pLon, pLat);
+  const mid = destPoint(tLon, tLat, brg, distKm * 500);
+  const H = Cesium.Math.toRadians;
+  const cap = (h, hi) => Math.min(h, hi);           // 超长洞高度封顶，别飞出太空
+  const playView = { destination: Cesium.Cartesian3.fromDegrees(mid[0], mid[1], cap(Math.max(500000, distKm * 3200), 3.5e6)),
+    orientation: { heading: H(brg), pitch: H(-55) } };
+  if (!flyoverIntro.enabled) { viewer.camera.setView(playView); onDone(); return; }
+  setState("brief");
+  /* 跳过机制：点击/按键随时跳过开场运镜，直接进瞄准态 */
+  let done = false;
+  const skipEl = document.getElementById("skipHint");
+  if (skipEl) skipEl.style.display = "block";
+  const finish = () => {
+    if (done) return;
+    done = true;
+    viewer.camera.cancelFlight();
+    window.removeEventListener("pointerdown", finish);
+    window.removeEventListener("keydown", finish);
+    if (skipEl) skipEl.style.display = "none";
+    clearTimeout(showBroadcast._t);                       // 转播字幕条同步收起
+    const bc = document.getElementById("broadcast"); if (bc) bc.style.display = "none";
+    onDone();
+  };
+  window.addEventListener("pointerdown", finish);
+  window.addEventListener("keydown", finish);
+  // ① 发球台高空远眺
+  viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(tLon, tLat, cap(distKm * 4500, 4e6)),
+    orientation: { heading: H(brg), pitch: H(-22) } });
+  // ② 俯冲到发球台近景
+  viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(tLon, tLat, 1200),
+    orientation: { heading: H(brg), pitch: H(-28) }, duration: 2.0, complete: () => {
+    if (done) return;
+    // ③ 360° 环视发球台景点（转慢一点，看清地标）
+    const h0 = viewer.camera.heading, t0 = Date.now(), ORBIT_MS = 8000;
+    const orbit = () => {
+      if (done) return;                               // 已跳过：中止环视
+      const t = Math.min(1, (Date.now() - t0) / ORBIT_MS);
+      viewer.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(tLon, tLat, 1200),
+        orientation: { heading: h0 + t * Math.PI * 2, pitch: H(-28) } });
+      if (t < 1) requestAnimationFrame(orbit);
+      else {
+        // ④ 沿球道走廊推进
+        viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(mid[0], mid[1], cap(distKm * 2000, 2.5e6)),
+          orientation: { heading: H(brg), pitch: H(-75) }, duration: 2.0, complete: () => {
+          if (done) return;
+          // ⑤ 果岭悬停 → ⑥ 落回击球视角
+          viewer.camera.flyTo({ destination: Cesium.Cartesian3.fromDegrees(pLon, pLat, cap(distKm * 1200, 1.5e6)),
+            orientation: { heading: H(brg), pitch: H(-70) }, duration: 1.8, complete: () => {
+            if (done) return;
+            viewer.camera.flyTo(Object.assign({}, playView, { duration: 1.6, complete: finish }));
+          } });
+        } });
+      }
+    };
+    orbit();
+  } });
+}
+flyoverIntro.enabled = true;
+
+/* ---------- 建议落点 + 打幅弧线（PGA 开球距离弧） ---------- */
+let aidsEntities = [];
+function buildShotAids() {
+  aidsEntities.forEach(e => viewer.entities.remove(e)); aidsEntities = [];
+  if (!shotOrigin) return;
+  const o = shotOrigin;
+  const distKm = haversineM(o[0], o[1], curHole.pin[0], curHole.pin[1]) / 1000;
+  const f = CARRY_FACTOR[curHole.terrain] || 0.85;
+  const maxCarryKm = targetCarryM(60) / 1000;
+  const sugKm = Math.min(distKm * f, maxCarryKm);
+  const circle = (rKm, color) => {
+    const pts = [];
+    for (let a = 0; a <= 360; a += 6) {
+      const q = destPoint(o[0], o[1], a, rKm * 1000);
+      pts.push(Cesium.Cartesian3.fromDegrees(q[0], q[1], 800));
+    }
+    aidsEntities.push(viewer.entities.add({ polyline: { positions: pts, width: 4,
+      material: new Cesium.PolylineDashMaterialProperty({ color, dashLength: 24 }) } }));
+  };
+  circle(sugKm, Cesium.Color.fromCssColorString("#ffd76a").withAlpha(1.0));    // 建议打幅弧（金）
+  circle(maxCarryKm, Cesium.Color.WHITE.withAlpha(0.55));                      // 全力打幅弧（白，60 m/s）
+  const s = destPoint(o[0], o[1], aimBearing(), sugKm * 1000);                 // 建议落点（跟随瞄准）
+  aidsEntities.push(viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(s[0], s[1], 800),
+    point: { pixelSize: 8, color: Cesium.Color.fromCssColorString("#ffd76a"), outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: "建议落点 " + yd(sugKm) + " 码", font: "11px sans-serif",
+      fillColor: Cesium.Color.fromCssColorString("#ffd76a"), pixelOffset: new Cesium.Cartesian2(0, -16),
+      showBackground: true, backgroundColor: Cesium.Color.fromCssColorString("#0a1218aa"),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY }
+  }));
+  /* 风偏预测停点：按建议杆速跑完整物理（含风），画出实际会停的位置 */
+  const distToPinM = distKm * 1000;
+  let bestCs = 20, bestErr = 1e18;
+  for (let cs = 1; cs <= 62; cs++) {
+    const err = Math.abs(targetCarryM(cs, distToPinM) / 1000 - sugKm);
+    if (err < bestErr) { bestErr = err; bestCs = cs; }
+  }
+  const rSim = simulate({ clubSpeed: bestCs, faceAngle: 0, pathAngle: 0, attackAngle: 0, distToPinM }, curHole);
+  const stop = pathPoint(o, aimBearing(), rSim, rSim.totalD);
+  const stopKm = haversineM(o[0], o[1], stop[0], stop[1]) / 1000;
+  aidsEntities.push(viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(stop[0], stop[1], 800),
+    point: { pixelSize: 10, color: Cesium.Color.fromCssColorString("#64b4ff"), outlineColor: Cesium.Color.WHITE, outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: "预计停点 " + yd(stopKm) + " 码", font: "11px sans-serif",
+      fillColor: Cesium.Color.fromCssColorString("#9fd2ff"), pixelOffset: new Cesium.Cartesian2(0, 18),
+      showBackground: true, backgroundColor: Cesium.Color.fromCssColorString("#0a1218aa"),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY }
+  }));
+}
+
+/* ---------- PGA 转播字幕条 ---------- */
+function showBroadcast(hole, ms) {
+  const el = document.getElementById("broadcast");
+  const distKm = haversineM(hole.tee[0], hole.tee[1], hole.pin[0], hole.pin[1]) / 1000;
+  document.getElementById("bTitle").textContent =
+    "第 " + hole.id + " 洞 · PAR " + hole.par + " · " + yd(distKm) + " 码 YDS";
+  document.getElementById("bName").textContent = holeRoute(hole);
+  // 开球前提示：码数 + 推荐球杆
+  const f = CARRY_FACTOR[hole.terrain] || 0.85;
+  const sugKm = Math.min(distKm * f, targetCarryM(60) / 1000);
+  const rc = realRef(Math.max(sugKm, 0.02));
+  document.getElementById("bClub").textContent =
+    "开球建议 · ≈真实 " + rc.yd + " 码 · 推荐 " + rc.club;
+  document.getElementById("bNote").textContent = HOLE_NOTES[hole.id] || "";
+  el.style.display = "block";
+  clearTimeout(showBroadcast._t);
+  showBroadcast._t = setTimeout(() => el.style.display = "none", ms);
+}
+
+function setupHole(hole, skipIntro) {
+  [teeEntity, pinEntity, greenEntity, aimEntity, ballEntity, landEntity].forEach(e => e && viewer.entities.remove(e));
+  const [tLon, tLat] = hole.tee, [pLon, pLat] = hole.pin;
+  const distKm = haversineM(tLon, tLat, pLon, pLat) / 1000;
+  // 洞杯/果岭按洞距比例设置（参考真实高尔夫：长洞容错更大）
+  hole.greenKm = Math.round(Math.min(12, Math.max(2, distKm * 0.02)) * 10) / 10;
+  hole.cupKm = Math.round(Math.min(4, Math.max(0.5, distKm * 0.004)) * 10) / 10;
+  shotOrigin = hole.tee.slice();
+  teeEntity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(tLon, tLat, 0),
+    point: { pixelSize: 12, color: Cesium.Color.fromCssColorString("#32f08c"), outlineColor: Cesium.Color.WHITE, outlineWidth: 2,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: "TEE · " + hole.name.split(" ")[0], font: "13px sans-serif", fillColor: Cesium.Color.fromCssColorString("#eafff2"),
+      pixelOffset: new Cesium.Cartesian2(0, -22), showBackground: true, backgroundColor: Cesium.Color.fromCssColorString("#0a1218cc"),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY }
+  });
+  pinEntity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(pLon, pLat, 0),
+    billboard: { image: flagCanvas(), verticalOrigin: Cesium.VerticalOrigin.BOTTOM, scale: 1.4,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    label: { text: "⛳ " + (hole.name.split("→")[1] || hole.name).trim(), font: "13px sans-serif",
+      fillColor: Cesium.Color.fromCssColorString("#ffd76a"), pixelOffset: new Cesium.Cartesian2(0, -64),
+      showBackground: true, backgroundColor: Cesium.Color.fromCssColorString("#0a1218cc"),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY }
+  });
+  greenEntity = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(pLon, pLat, 0),
+    ellipse: { semiMajorAxis: hole.greenKm * 1000, semiMinorAxis: hole.greenKm * 1000,
+      material: Cesium.Color.fromCssColorString("#0fdc78").withAlpha(0.22),
+      outline: true, outlineColor: Cesium.Color.fromCssColorString("#0fdc78") }
+  });
+  updateAimLine();
+  // HUD
+  document.getElementById("hName").textContent = holeTitle(hole);
+  document.getElementById("hDist").textContent = "≈真实 " + realRef(distKm).yd + " 码 · " + distKm.toFixed(1) + " km";
+  document.getElementById("hPar").textContent = hole.par;
+  document.getElementById("hCup").textContent = hole.greenKm + " / " + hole.cupKm + " km";
+  document.getElementById("hStrokes").textContent = "0";
+  updateCaddie();
+  document.getElementById("hTerrain").textContent = TERRAIN[hole.terrain].name + (hole.elevM ? " · " + hole.elevM + "m" : "");
+  document.getElementById("hProg").textContent = (holeIndex + 1) + " / " + HOLES.length;
+  updateWindHud(false);
+  // 每洞开场：大字显示 第几洞 + 中英文洞名
+  showHoleBanner(hole);
+  // 球道图 + 开球前鸟瞰运镜 + PGA 转播字幕条
+  buildCourseMap(hole);
+  showBroadcast(hole, skipIntro ? 2800 : 6500);
+  applyFilter(hole.filter);
+  holeStrokes = 0; holePenalty = 0; lastResult = null;
+  flyoverIntro.enabled = !skipIntro;
+  flyoverIntro(hole, distKm, () => { setState("aim"); frameShot(); });
+  // 实时风（异步，失败静默回退静态风）
+  fetchRealWind(hole).then(ok => updateWindHud(ok));
+}
+
+function updateWindHud(live) {
+  document.getElementById("windTxt").textContent = curHole.wind.speed + " m/s · " + curHole.wind.dir + "°";
+  document.getElementById("windArrowSvg").style.transform = "rotate(" + curHole.wind.dir + "deg)";
+  const src = document.getElementById("windSrc");
+  src.textContent = live ? "● Open-Meteo 实测" : "静态风";
+  src.classList.toggle("live", !!live);
+}
+
+function aimBearing() {
+  const o = shotOrigin || curHole.tee;
+  return bearingOf(o[0], o[1], curHole.pin[0], curHole.pin[1]) + aimAdjust;
+}
+function updateAimLine() {
+  if (aimEntity) viewer.entities.remove(aimEntity);
+  const o = shotOrigin || curHole.tee;
+  const pinDist = haversineM(o[0], o[1], curHole.pin[0], curHole.pin[1]);
+  const pts = [];
+  for (let f = 0; f <= 1.0001; f += 0.05) {
+    const p = destPoint(o[0], o[1], aimBearing(), pinDist * 1.1 * f);
+    pts.push(Cesium.Cartesian3.fromDegrees(p[0], p[1], 500));
+  }
+  aimEntity = viewer.entities.add({
+    polyline: { positions: pts, width: 2,
+      material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.fromCssColorString("#32f08c").withAlpha(0.7) }) }
+  });
+  buildShotAids();   // 建议落点 + 打幅弧线随瞄准刷新
+}
+
+/* ---------- 挥杆 → 全链路 ---------- */
+function commitShot(spec) {
+  if (state === "flight") return null;
+  setState("flight");
+  sfxShot();                                          // 击球音效
+  holeStrokes++;
+  document.getElementById("hStrokes").textContent = holeStrokes;
+  const brg = aimBearing();
+  const o = (shotOrigin || curHole.tee).slice();
+  spec.distToPinM = haversineM(o[0], o[1], curHole.pin[0], curHole.pin[1]);   // 短杆精准区判定
+  const r = simulate(spec, curHole);
+  // 滚过洞杯：滚动阶段经过洞杯半径内 → 被球洞捕获（截断轨迹，停在洞杯）
+  const cap = cupCapture(o, brg, r, curHole);
+  if (cap) {
+    r.samples = r.samples.filter(s => s.t <= cap.t).concat([{ t: cap.t, d: cap.d, h: 0 }]);
+    r.tof = cap.t;
+  }
+  // 球面投影：从当前击球起点沿航线推进 carry+roll，垂直方向叠加侧偏
+  const landing = cap ? curHole.pin.slice() : pathPoint(o, brg, r, r.totalD);
+  const distToPinKm = cap ? 0 : haversineM(landing[0], landing[1], curHole.pin[0], curHole.pin[1]) / 1000;
+  const water = !cap && isWater(landing[0], landing[1]);
+  const holed = cap || (!water && distToPinKm <= curHole.greenKm);   // 规则：上果岭即算进洞
+  const hitKm = haversineM(o[0], o[1], landing[0], landing[1]) / 1000;   // 本杆真实击球距离
+  showShotHit(hitKm);                               // 每次挥杆：大字显示真实击球距离
+  if (water) {                                        // 高尔夫下水规则：+1 罚杆（-20 分），回原地重打
+    holePenalty++;
+    totalScore = Math.max(0, totalScore - 20);
+    document.getElementById("hScore").textContent = totalScore;
+  }
+  lastResult = {
+    spec, bearing: brg, origin: o, landing, distToPinKm, water, holed, hitKm,
+    points: 0, onGreen: !water && distToPinKm <= curHole.greenKm,
+    carryKm: r.carryM / 1000, rollKm: r.rollM / 1000, apexKm: r.apexM / 1000, tof: r.tof,
+    strokes: holeStrokes, penalty: holePenalty
+  };
+  if (window.__egolfInstant) { showResult(); return lastResult; }   // 探针：跳过飞行动画直接结算
+  playFlight(r, brg, o, landing, () => showResult());
+  return lastResult;
+}
+
+function playFlight(r, brg, origin, landing, onDone) {
+  playFlight.last = { r, brg, origin: origin.slice(), landing: landing.slice() };   // 供 R 键回放
+  if (ballEntity) viewer.entities.remove(ballEntity);
+  if (landEntity) viewer.entities.remove(landEntity);
+  const start = Cesium.JulianDate.now();
+  const prop = new Cesium.SampledPositionProperty();
+  for (const s of r.samples) {
+    const p = destPoint(origin[0], origin[1], brg, s.d);
+    const lat0 = destPoint(p[0], p[1], brg + 90, r.lateralM * (s.d / r.totalD));
+    prop.addSample(Cesium.JulianDate.addSeconds(start, s.t, new Cesium.JulianDate()),
+      Cesium.Cartesian3.fromDegrees(lat0[0], lat0[1], s.h));
+  }
+  const stop = Cesium.JulianDate.addSeconds(start, r.tof, new Cesium.JulianDate());
+  ballEntity = viewer.entities.add({
+    position: prop,
+    point: { pixelSize: 14, color: Cesium.Color.WHITE, outlineColor: Cesium.Color.fromCssColorString("#ffd76a"), outlineWidth: 3,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY },
+    path: { leadTime: 0, trailTime: r.tof, width: 10,
+      material: new Cesium.PolylineGlowMaterialProperty({ glowPower: 0.18, taperPower: 0.9, color: Cesium.Color.fromCssColorString("#ffd76a") }) },
+    availability: new Cesium.TimeIntervalCollection([new Cesium.TimeInterval({ start, stop })])
+  });
+  viewer.clock.startTime = start.clone();
+  viewer.clock.stopTime = stop.clone();
+  viewer.clock.currentTime = start.clone();
+  viewer.clock.multiplier = Math.max(1, r.tof / 8);      // 压缩到 ~8s 看完
+  viewer.clock.shouldAnimate = true;
+
+  // 落地/下水音效：按压缩后的时间轴在触地瞬间播放
+  const wet = isWater(landing[0], landing[1]);
+  setTimeout(() => { wet ? sfxWater() : sfxLand(); }, Math.max(0, (r.flightT / r.tof) * 8000));
+
+  // 航拍式运镜：起始贴近球后上方（清楚看到起飞），随进度非线性拉高，末段全局视角并封顶
+  const camUpdate = () => {
+    const pos = prop.getValue(viewer.clock.currentTime);
+    if (!pos) return;
+    const c = Cesium.Cartographic.fromCartesian(pos);
+    const tt = Math.min(1, Math.max(0, Cesium.JulianDate.secondsDifference(viewer.clock.currentTime, start) / r.tof));
+    const closeH = 9000;                                        // 起始：球后上方 9 km，起飞清晰可见
+    const farH = Math.min(r.totalD * 1.1, 2.2e6);               // 末段：拉高到全局，封顶 2200 km
+    const camH = Math.max(c.height * 2.2 + closeH, closeH + tt * tt * farH);
+    const back = destPoint(Cesium.Math.toDegrees(c.longitude), Cesium.Math.toDegrees(c.latitude), brg + 180, camH * 0.6);
+    viewer.camera.setView({
+      destination: Cesium.Cartesian3.fromDegrees(back[0], back[1], camH),
+      // 俯角按几何关系对准球心（球在屏幕中心）
+      orientation: { heading: Cesium.Math.toRadians(brg), pitch: -Math.atan2(camH, camH * 0.6) }
+    });
+  };
+  const stopCam = viewer.scene.preUpdate.addEventListener(camUpdate);
+
+  const watchMs = Math.min(8000, r.tof * 1000 / viewer.clock.multiplier) + 600;
+  setTimeout(() => {
+    stopCam();
+    const res = lastResult;
+    landEntity = viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(landing[0], landing[1], 0),
+      point: { pixelSize: 12, color: res && res.water ? Cesium.Color.fromCssColorString("#64b4ff") : Cesium.Color.fromCssColorString("#ffd76a"),
+        outlineColor: Cesium.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: (res && res.water ? "💧 WATER\n" : "") + "SHOT " + (res ? realRef(res.hitKm).yd : 0) + " YD\n" +
+          "TO PIN " + (res ? realRef(res.distToPinKm).yd : 0) + " YD",
+        font: "12px sans-serif", fillColor: Cesium.Color.fromCssColorString(res && res.water ? "#9fd2ff" : "#eafff2"),
+        pixelOffset: new Cesium.Cartesian2(0, -20), showBackground: true, backgroundColor: Cesium.Color.fromCssColorString("#0a1218cc"),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY }
+    });
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(landing[0], landing[1], 90000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-62) }, duration: 1.6
+    });
+    setTimeout(onDone, 1700);
+  }, watchMs);
+}
+
+/* ---------- FSM / HUD ---------- */
+function flashReady() {
+  const el = document.getElementById("ready");
+  // 每次挥杆前提示：距洞公里数 + 真实折算码数
+  const o = shotOrigin || curHole.tee, p = curHole.pin;
+  const dKm = haversineM(o[0], o[1], p[0], p[1]) / 1000;
+  el.innerHTML = "READY<span class='sub'>" + dKm.toFixed(1) + " KM · " + realRef(dKm).yd + " YD</span>";
+  el.style.display = "block"; el.style.transition = "none"; el.style.opacity = "1";
+  requestAnimationFrame(() => { el.style.transition = "opacity .45s"; });
+  clearTimeout(flashReady._t);
+  flashReady._t = setTimeout(() => {
+    el.style.opacity = "0";
+    setTimeout(() => { if (el.style.opacity === "0") el.style.display = "none"; }, 450);
+  }, 2000);
+}
+/* 每洞开场：大字显示 第几洞 + 中英文洞名 */
+function showHoleBanner(hole) {
+  const el = document.getElementById("holeBanner");
+  document.getElementById("hbNum").textContent = "第 " + hole.id + " 洞";
+  document.getElementById("hbName").textContent = landCN(hole) + "　" + landEN(hole);
+  document.getElementById("hbRoute").textContent = holeRoute(hole);
+  el.style.transition = "none"; el.style.opacity = "1";
+  requestAnimationFrame(() => { el.style.transition = "opacity .6s"; });
+  clearTimeout(showHoleBanner._t);
+  showHoleBanner._t = setTimeout(() => { el.style.opacity = "0"; }, 3600);
+}
+/* 本杆结果（大字）：挥杆显示真实击球距离 → 落定显示剩余距洞 → 结算大字报成绩 */
+function showShotHit(hitKm) {
+  const el = document.getElementById("shotBig");
+  document.getElementById("sbHit").innerHTML =
+    '<span class="tag">SHOT</span><b>' + realRef(hitKm).yd + '</b><span class="unit">YDS</span>';
+  ["sbRemain", "sbScore"].forEach(id => { const n = document.getElementById(id); n.style.display = "none"; n.innerHTML = ""; });
+  el.style.display = "block"; el.style.transition = "none"; el.style.opacity = "0";
+  requestAnimationFrame(() => { el.style.transition = "opacity .45s"; el.style.opacity = "1"; });
+}
+function showShotRemain(distKm, holed, onGreenOnly) {
+  const rem = document.getElementById("sbRemain");
+  rem.style.display = "block";
+  rem.innerHTML = holed ? (onGreenOnly ? '<span class="tag">ON GREEN ✓</span>' : '<span class="tag">IN THE CUP</span>')
+                        : '<span class="tag">TO PIN</span><b>' + realRef(distKm).yd + '</b><span class="unit">YDS</span>';
+}
+/* 每洞打完：全屏大字报成绩（成绩名 + 得分 + 杆数/PAR） */
+function showHoleScore(label, strokes, par, pts) {
+  document.getElementById("hsLabel").textContent = label;
+  document.getElementById("hsPts").innerHTML = (pts >= 0 ? "+" : "") + pts + '<span style="font-size:20px;letter-spacing:.25em"> PTS</span>';
+  document.getElementById("hsDetail").textContent = strokes + " STROKES · PAR " + par;
+  const el = document.getElementById("holeScore");
+  el.style.display = "block"; el.style.transition = "none"; el.style.opacity = "0";
+  requestAnimationFrame(() => { el.style.transition = "opacity .45s"; el.style.opacity = "1"; });
+}
+function hideHoleScore() {
+  const el = document.getElementById("holeScore");
+  if (el.style.display === "none") return;
+  el.style.opacity = "0";
+  setTimeout(() => { if (el.style.opacity === "0") el.style.display = "none"; }, 450);
+}
+function hideShotBig() {
+  const el = document.getElementById("shotBig");
+  if (el.style.display === "none") return;
+  el.style.opacity = "0";
+  setTimeout(() => { if (el.style.opacity === "0") el.style.display = "none"; }, 450);
+}
+function setState(s) {
+  state = s;
+  document.getElementById("stateTxt").textContent = (s === "aim") ? "READY" : s.toUpperCase();
+  document.getElementById("swingBtn").disabled = (s !== "aim");
+  if (s === "aim") {
+    aimAdjust = 0;                              // 自动对准球洞
+    const sl = document.getElementById("aimSlider"); if (sl) sl.value = 0;
+    const av = document.getElementById("aimVal"); if (av) av.textContent = "0.0°";
+    updateAimLine();
+    flashReady();                               // 就绪提示
+  }
+}
+/* 视野：tee 与 pin 同时入屏。镜头放在 tee 后方，沿球道方向看，俯角按距离自适应 */
+function frameShot() {
+  const o = shotOrigin || curHole.tee, p = curHole.pin;
+  const dM = haversineM(o[0], o[1], p[0], p[1]);
+  const dKm = dM / 1000;
+  const brg = bearingOf(o[0], o[1], p[0], p[1]);
+  // 相机后退到 tee 后方 35% 处，使 tee 在画面下方、pin 在上方远景
+  const camPos = destPoint(o[0], o[1], brg + 180, dM * 0.35);
+  // 相机高度 ≈ 距离 × 1.0（俯角约 45°），最少 30km 防止贴地
+  const camH = Math.max(30000, dM * 1.0);
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(camPos[0], camPos[1], camH),
+    orientation: {
+      heading: Cesium.Math.toRadians(brg),
+      pitch: Cesium.Math.toRadians(-50)
+    },
+    duration: 1.2
+  });
+}
+/* ---------- 杆数 vs Par / 进洞结算（参考真实高尔夫玩法） ---------- */
+function parLabel(s, par) {
+  if (s <= par - 2) return "EAGLE";
+  if (s === par - 1) return "BIRDIE";
+  if (s === par)     return "PAR";
+  if (s === par + 1) return "BOGEY";
+  return "+" + (s - par);
+}
+function settleHole() {
+  const r = lastResult;
+  // 按距洞 proximity 计分：基准=半个洞长，越近分越高，果岭内 ≈57+
+  const holeDistKm = haversineM(curHole.tee[0], curHole.tee[1], curHole.pin[0], curHole.pin[1]) / 1000;
+  const pts = r.holed
+    ? 150 + Math.max(0, curHole.par - r.strokes) * 20      // 进洞：基础 150 + 低于标准杆奖励
+    : Math.max(0, Math.round(60 * (1 - r.distToPinKm / (holeDistKm * 0.5))));
+  if (!r.counted) { totalScore += pts; holeScores[holeIndex] = pts; r.counted = true; r.points = pts; }
+  document.getElementById("hScore").textContent = totalScore;
+  return r.points;
+}
+function advanceHole() {
+  if (holeIndex >= HOLES.length - 1) { showFinal(); return; }
+  holeIndex++; curHole = HOLES[holeIndex];
+  setupHole(curHole);
+}
+/* 一杆结束后的自动流转：大字展示本杆结果 → 停 3s → 再进下一杆/下一洞 */
+function showResult() {
+  const r = lastResult;
+  // 落定后大字显示剩余距洞（下水回原地，按原地重算）
+  const remKm = r.water ? haversineM(r.origin[0], r.origin[1], curHole.pin[0], curHole.pin[1]) / 1000 : r.distToPinKm;
+  showShotRemain(remKm, r.holed, r.holed && remKm > curHole.cupKm);
+  if (r.water) {                                     // 下水：按规则静默处理（罚杆已扣），原地重打
+    afterShotView(() => { updateCaddie(); setState("aim"); frameShot(); });
+    return;
+  }
+  const forced = holeStrokes >= curHole.par + 3;     // 杆数封顶：强制按距洞计分
+  if (r.holed || forced) {
+    const pts = settleHole();
+    const scLabel = r.holed ? parLabel(r.strokes, curHole.par)
+                            : "CAP +" + (r.strokes - curHole.par);
+    if (r.holed) { sfxHole(); sfxCheer(scLabel); }     // 进洞三连音 + 分级观众欢呼
+    showHoleScore(scLabel, r.strokes, curHole.par, pts);   // 每洞打完：大字报成绩
+    afterShotView(() => advanceHole());
+    return;
+  }
+  shotOrigin = r.landing.slice();                    // 未进洞：从落点继续
+  afterShotView(() => { updateCaddie(); setState("aim"); frameShot(); });
+}
+/* 本杆大字停留片刻后再推进，避免与 READY / 下一洞横幅重叠 */
+function afterShotView(fn) {
+  clearTimeout(afterShotView._t);
+  afterShotView._t = setTimeout(() => { hideShotBig(); hideHoleScore(); fn(); }, 3000);
+}
+function showFinal() {
+  const rows = HOLES.map((h, i) => "洞" + h.id + " " + h.name + " · " + (holeScores[i] || 0) + " 分").join("<br>");
+  document.getElementById("rDist").textContent = totalScore + " 分";
+  document.getElementById("rStats").innerHTML = "世界巡回 18 洞完赛<br>" + rows;
+  document.getElementById("result").style.display = "block";
+  setState("final");
+}
+function toast(msg, ms) {
+  const el = document.getElementById("toast");
+  el.textContent = msg; el.style.display = "block";
+  setTimeout(() => el.style.display = "none", ms || 2600);
+}
+function applyFilter(f) {
+  const c = document.getElementById("cesiumContainer");
+  c.className = f || "";
+  document.querySelectorAll(".fbtn[data-f]").forEach(b => b.classList.toggle("on", b.dataset.f === (f || "")));
+}
+
+/* ---------- 调试挥杆台（兜底输入） ---------- */
+function readSpec() {
+  return {
+    clubSpeed: +document.getElementById("sCs").value,
+    faceAngle: +document.getElementById("sFace").value,
+    pathAngle: +document.getElementById("sPath").value,
+    attackAngle: +document.getElementById("sAtk").value,
+    tempo: 1
+  };
+}
+[["sCs","vCs"," m/s"],["sFace","vFace","°"],["sPath","vPath","°"],["sAtk","vAtk","°"]].forEach(([s,v,u]) => {
+  document.getElementById(s).addEventListener("input", e =>
+    document.getElementById(v).textContent = e.target.value + u);
+});
+document.getElementById("aimSlider").addEventListener("input", e => {
+  aimAdjust = +e.target.value;
+  document.getElementById("aimVal").textContent = aimAdjust.toFixed(1) + "°";
+  updateAimLine();
+});
+document.getElementById("swingBtn").addEventListener("click", () => commitShot(readSpec()));
+document.getElementById("imuBtn").addEventListener("click", () => IMU.connect());
+
+/* ---------- 手机陀螺仪球杆（同服务器轮询 /api/swing） ---------- */
+const Phone = {
+  live: false, timer: null,
+  async toggle() {
+    const btn = document.getElementById("phoneBtn");
+    if (this.live) {
+      this.live = false; clearInterval(this.timer);
+      btn.classList.remove("live"); btn.textContent = "📱 手机球杆";
+      return;
+    }
+    let url = "sensor.html";
+    try {
+      const j = await (await fetch("/api/ip")).json();
+      url = "http://" + j.ip + ":" + j.port + "/sensor.html";
+    } catch (e) {}
+    this.live = true;
+    btn.classList.add("live"); btn.textContent = "📱 已连接";
+    this.timer = setInterval(async () => {
+      try {
+        const j = await (await fetch("/api/swing")).json();
+        if (!j.swing) return;
+        if (typeof j.swing.aimDelta === "number") {          // 手机瞄准微调
+          aimAdjust = Math.max(-15, Math.min(15, aimAdjust + j.swing.aimDelta));
+          const sl = document.getElementById("aimSlider"); if (sl) sl.value = aimAdjust;
+          const av = document.getElementById("aimVal"); if (av) av.textContent = aimAdjust.toFixed(1) + "°";
+          updateAimLine();
+          return;
+        }
+        if (state === "aim") commitShot(j.swing);
+        // 非瞄准态的挥杆直接丢弃
+      } catch (e) {}
+    }, 250);
+  }
+};
+document.getElementById("phoneBtn").addEventListener("click", () => Phone.toggle());
+/* 单杆回放：R 键 / 回放按钮，重放上一杆飞行（不改写成绩与落点） */
+function replayLast() {
+  if (state !== "aim" || !playFlight.last) { toast("暂无可回放的杆"); return; }
+  const L = playFlight.last;
+  setState("flight");
+  playFlight(L.r, L.brg, L.origin, L.landing, () => { setState("aim"); frameShot(); });
+}
+document.getElementById("replayBtn").addEventListener("click", replayLast);
+window.addEventListener("keydown", e => {
+  if ((e.key === "r" || e.key === "R") && state === "aim") replayLast();
+});
+document.querySelectorAll(".fbtn[data-f]").forEach(b =>
+  b.addEventListener("click", () => applyFilter(b.dataset.f)));
+
+/* 完赛判定：第 9 洞结算后再点「重打本洞」旁的关闭即终榜 —— 简化为第 9 洞结算面板长按显示终榜 */
+document.getElementById("rDist").addEventListener("dblclick", () => { if (holeIndex === HOLES.length - 1) showFinal(); });
+
+/* ---------- 音效（Web Audio 合成，无外部音频文件，离线可用） ---------- */
+let actx = null, master = null, muted = false, audioWarned = false;
+function audio() {
+  if (!actx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    actx = new AC();
+    master = actx.createGain();
+    master.gain.value = 1.5;                     /* 整体音量基线 */
+    master.connect(actx.destination);
+  }
+  if (actx.state !== "running") actx.resume().catch(() => {});
+  return actx;
+}
+function audioReady() { return !!actx && actx.state === "running" && !muted; }
+/* 浏览器自动播放策略：必须在用户手势内解锁音频，多事件兜底 */
+["pointerdown", "touchend", "keydown"].forEach(ev =>
+  window.addEventListener(ev, () => audio(), { passive: true }));
+function audioUnlockHint() {                        // 音频被浏览器拦截时提醒一次
+  if (audioReady() || audioWarned) return;
+  audioWarned = true;
+  try { toast("点一下画面任意处即可开启音效", 3600); } catch (e) {}
+}
+/* 极简合成器：单音（可滑音）与噪声（滤波塑形） */
+function tone(t0, f0, f1, dur, type, gain) {
+  const a = audio(); if (!a || muted) return;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(f0, t0);
+  if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(gain, t0 + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  o.connect(g); if (master) g.connect(master); else g.connect(a.destination);
+  o.start(t0); o.stop(t0 + dur + 0.03);
+}
+function noise(t0, dur, gain, hp) {
+  const a = audio(); if (!a || muted) return;
+  const n = Math.max(1, Math.floor(a.sampleRate * dur)), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const f = a.createBiquadFilter(); f.type = hp ? "highpass" : "lowpass"; f.frequency.value = hp || 900;
+  const g = a.createGain();
+  g.gain.setValueAtTime(gain, t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f); f.connect(g); if (master) g.connect(master); else g.connect(a.destination);
+  src.start(t0); src.stop(t0 + dur);
+}
+function sfxShot() {                       // 挥杆破空 + 击球 "tock"
+  const a = audio(); if (!a || muted) return; audioUnlockHint(); const t = a.currentTime;
+  noise(t, 0.18, 1.10, 1600);
+  tone(t + 0.10, 1500, 320, 0.13, "square", 0.70);
+}
+function sfxLand() {                       // 落地闷响（抬高基频，笔记本小喇叭也听得到）
+  const a = audio(); if (!a || muted) return; audioUnlockHint(); const t = a.currentTime;
+  noise(t, 0.14, 0.80, 0);
+  tone(t, 300, 110, 0.2, "sine", 0.90);
+}
+function sfxWater() {                      // 落水哗啦
+  const a = audio(); if (!a || muted) return; audioUnlockHint(); const t = a.currentTime;
+  noise(t, 0.4, 1.30, 0);
+  tone(t + 0.04, 700, 130, 0.34, "sine", 0.55);
+}
+function sfxHole() {                       // 进洞三连音
+  const a = audio(); if (!a || muted) return; audioUnlockHint(); const t = a.currentTime;
+  [880, 1174.7, 1568].forEach((f, i) => tone(t + i * 0.09, f, f, 0.3, "triangle", 0.75));
+}
+/* 分级观众欢呼：噪声人群欢呼 + 随机口哨声，按成绩分档 */
+function sfxCheer(label) {
+  const a = audio(); if (!a || muted) return;
+  const t = a.currentTime;
+  const cfg = { EAGLE: [2.2, 1.20, 4], BIRDIE: [1.5, 1.00, 2], PAR: [1.0, 0.70, 1] }[label] || [0.8, 0.55, 0];
+  noise(t, cfg[0], cfg[1], 700);                       // 人群欢呼主体
+  noise(t, Math.min(0.6, cfg[0]), cfg[1] * 0.7, 2500); // 高频掌声层
+  for (let i = 0; i < cfg[2]; i++) {                   // 随机口哨（滑音）
+    const f0 = 1800 + Math.random() * 900;
+    tone(t + 0.2 + Math.random() * cfg[0] * 0.6, f0, f0 * 1.3, 0.25, "sine", 0.35);
+  }
+}
+const muteBtn = document.getElementById("muteBtn");
+if (muteBtn) muteBtn.onclick = () => {
+  muted = !muted;
+  muteBtn.textContent = muted ? "🔇 静音" : "🔊 音效";
+  muteBtn.classList.toggle("on", !muted);
+  if (!muted) sfxHole();                     // 开启音效时试听，确认能否听到
+};
+
+/* ---------- CDP 探针（__egolf* 约定） ---------- */
+window.__egolfForceShot = function (spec) {
+  const s = Object.assign({ clubSpeed: 42, faceAngle: 0, pathAngle: 0, attackAngle: 0, tempo: 1 }, spec || {});
+  if (typeof s.aimDeg === "number") { aimAdjust = s.aimDeg; }
+  return commitShot(s);
+};
+window.__egolfSetHole = function (holeDef) {
+  curHole = Object.assign({}, curHole, holeDef || {});
+  setupHole(curHole, true);          // 探针换洞：跳过鸟瞰
+  return curHole;
+};
+window.__egolfGoto = function (n) {  // 探针：跳转到第 n 洞（0 基）
+  holeIndex = Math.max(0, Math.min(HOLES.length - 1, n));
+  curHole = HOLES[holeIndex];
+  setupHole(curHole, true);
+  return curHole.name;
+};
+window.__egolfInfo = function () {
+  return {
+    state, holeIndex, hole: curHole.name, aimDeg: aimAdjust,
+    wind: curHole.wind, terrain: curHole.terrain,
+    pin: curHole.pin, landing: lastResult ? lastResult.landing : null,
+    distToPinKm: lastResult ? lastResult.distToPinKm : null,
+    points: lastResult ? lastResult.points : null,
+    carryKm: lastResult ? lastResult.carryKm : null,
+    apexKm: lastResult ? lastResult.apexKm : null,
+    water: lastResult ? lastResult.water : null,
+    holed: lastResult ? lastResult.holed : null,
+    strokes: holeStrokes, penalty: holePenalty,
+    shotOrigin, cupKm: curHole.cupKm, greenKm: curHole.greenKm, par: curHole.par,
+    aidsCount: aidsEntities.length, courseCount: courseEntities.length,
+    totalScore
+  };
+};
+
+/* ---------- 启动 ---------- */
+window.__egolfViewer = viewer;   // 调试用
+setupHole(curHole);
+</script>
+</body>
+</html>

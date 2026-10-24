@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>EARTH GOLF · 手机球杆</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { background: #070d12; color: #eafff2; font-family: -apple-system, "PingFang SC", sans-serif;
+    min-height: 100vh; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+  body { display: flex; flex-direction: column; padding: 14px 16px 28px; }
+
+  /* 顶部栏 */
+  header { display:flex; justify-content:space-between; align-items:center; padding:4px 4px 14px; }
+  header h1 { font-size: 17px; letter-spacing: .12em; color: #5ad395; font-weight:700; }
+  header .cog { width: 38px; height: 38px; border-radius: 50%; border: 1px solid #32f08c;
+    color: #32f08c; background: transparent; font-size: 20px; cursor: pointer; display:flex; align-items:center; justify-content:center; }
+  header .cog.open { background: #32f08c33; }
+
+  /* 主区域 · 力量调节（最常用，最大） */
+  .power-card { background: linear-gradient(180deg, #0f2217 0%, #070d12 100%);
+    border: 1px solid #1a3a26; border-radius: 16px; padding: 18px 16px 20px; text-align: center;
+    box-shadow: 0 0 24px rgba(50,240,140,.06); }
+  .power-card .label { font-size: 13px; color: #8fbfa3; letter-spacing: .12em; margin-bottom: 8px; }
+  .power-card .big { font-size: 64px; font-weight: 800; color: #32f08c; line-height: 1;
+    text-shadow: 0 0 28px rgba(50,240,140,.45); font-variant-numeric: tabular-nums; }
+  .power-card .unit { font-size: 18px; color: #b9e8cc; margin-left: 4px; }
+  .power-card .sub { font-size: 12px; color: #7fa68d; margin-top: 4px; }
+  .big-btn-row { display:flex; justify-content: center; gap: 14px; margin-top: 14px; }
+  .big-btn-row button { flex: 1; min-width: 72px; height: 56px; border-radius: 12px; border: 1px solid #32f08c;
+    background: rgba(50,240,140,.08); color: #32f08c; font-size: 28px; font-weight: 700; cursor: pointer;
+    font-family: inherit; }
+  .big-btn-row button:active { background: #32f08c55; transform: scale(.96); }
+  .big-btn-row .preset-row { display:flex; flex-direction: column; gap: 6px; flex: 1; max-width: 120px; }
+  .preset-row button { height: 24px; font-size: 11px; font-weight: 500; border-radius: 8px;
+    border: 1px solid #5ad395; background: transparent; color: #5ad395; letter-spacing: .1em; }
+  .preset-row button:active { background: #5ad39533; }
+
+  /* 细滑杆 */
+  .fine-slider { margin-top: 14px; }
+  .fine-slider input { width: 100%; height: 34px; accent-color: #32f08c; }
+
+  /* 圆形击球按钮 + 传感器状态 */
+  .swing-area { display:flex; flex-direction:column; align-items:center; margin-top: 22px; }
+  #btn { width: 180px; height: 180px; border-radius: 50%; border: 3px solid #32f08c;
+    background: radial-gradient(circle, #0d1a12, #070d12); color: #32f08c; font-size: 18px; font-weight: 700;
+    letter-spacing: .1em; cursor: pointer; }
+  #btn.on { background: radial-gradient(circle, #123524, #070d12); box-shadow: 0 0 40px #32f08c66; }
+  #btn.swing { background: #32f08c; color: #04120a; transform: scale(.97); }
+  #meter { width: 220px; height: 8px; background: #10241a; border-radius: 4px; margin-top: 18px; overflow: hidden; }
+  #bar { height: 100%; width: 0; background: linear-gradient(90deg, #32f08c, #ffd76a, #e8463a); transition: width .05s; }
+  #log { margin-top: 14px; font-size: 12px; color: #8fbfa3; min-height: 36px; line-height: 1.6; text-align: center; }
+
+  /* 瞄准面板 */
+  .aim-card { margin-top: 16px; background: #0e1a13; border: 1px solid #1a3a26; border-radius: 12px; padding: 12px 14px; }
+  .aim-row { display:flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .aim-row .lbl { color:#8fbfa3; font-size:12px; letter-spacing:.1em; margin-right:4px; }
+  .aim-row .now { color:#eafff2; font-weight:700; font-size:16px; min-width:58px; text-align:center;
+    font-variant-numeric: tabular-nums; }
+  .aim-row button { border:1px solid #5ad395; background:transparent; color:#5ad395; border-radius: 8px;
+    padding:8px 10px; font-size: 13px; cursor:pointer; font-family: inherit; }
+  .aim-row button:active { background: #5ad39533; }
+
+  /* 高级设置（折叠） */
+  #adv { display:none; margin-top: 14px; background: #0e1a13; border: 1px solid #1a3a26; border-radius: 12px; padding: 14px; font-size: 12px; color: #b9e8cc; }
+  #adv.open { display: block; }
+  #adv .adv-row { display:flex; align-items: center; gap: 10px; margin: 10px 0; }
+  #adv .adv-row .lbl { min-width: 78px; color:#8fbfa3; letter-spacing:.08em; }
+  #adv input[type=range] { flex: 1; accent-color:#32f08c; }
+  #adv .nudge { border:1px solid #32f08c; background:transparent; color:#32f08c; border-radius:8px;
+    padding:6px 10px; font-size:13px; cursor:pointer; font-family:inherit; }
+  #adv .val { min-width: 88px; color:#eafff2; font-variant-numeric: tabular-nums; text-align:right; }
+  #adv .host-row { margin-top:14px; padding-top: 12px; border-top: 1px dashed #1a3a26; display:flex; gap:8px; align-items:center; }
+  #adv .host-row a { color:#32f08c; text-decoration:none; }
+  #adv .host-row a.small { color:#7fa68d; font-size:11px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>EARTH GOLF · 手机球杆</h1>
+  <button class="cog" id="cogBtn">⚙</button>
+</header>
+
+<!-- 力量调节：最显眼，大按钮 + 大字 -->
+<div class="power-card">
+  <div class="label">打击力量</div>
+  <div><span class="big" id="powV">1.0</span><span class="unit">×</span></div>
+  <div class="sub" id="powHint">打太远就往左调，打太近往右</div>
+  <div class="big-btn-row">
+    <button onclick="powNudge(-0.05)">−</button>
+    <div class="preset-row">
+      <button onclick="powSet(0.7)">推杆 0.7×</button>
+      <button onclick="powSet(1.0)">标准 1.0×</button>
+      <button onclick="powSet(1.3)">全挥 1.3×</button>
+    </div>
+    <button onclick="powNudge(0.05)">+</button>
+  </div>
+  <div class="fine-slider"><input type="range" id="pow" min="0.4" max="1.6" step="0.05" value="1"></div>
+</div>
+
+<!-- 传感器按钮 + 状态条 -->
+<div class="swing-area">
+  <button id="btn">启动<br>传感器</button>
+  <div id="meter"><div id="bar"></div></div>
+  <div id="log">未启动 · 点圆形按钮或轻摇授权</div>
+</div>
+
+<!-- 瞄准 -->
+<div class="aim-card">
+  <div class="aim-row">
+    <span class="lbl">瞄准</span>
+    <button onclick="aimNudge(-0.5)">◀◀ 0.5</button>
+    <button onclick="aimNudge(-0.1)">◀ 0.1</button>
+    <span class="now" id="aimNow">0.0°</span>
+    <button onclick="aimNudge(0.1)">0.1 ▶</button>
+    <button onclick="aimNudge(0.5)">0.5 ▶▶</button>
+  </div>
+</div>
+
+<!-- 高级设置（折叠） -->
+<div id="adv">
+  <div class="adv-row">
+    <span class="lbl">灵敏度</span>
+    <input type="range" id="sens" min="30" max="450" value="120" step="10">
+    <span class="val" id="sensV">120</span>
+    <button class="nudge" onclick="presetSens(260)">全挥</button>
+    <button class="nudge" onclick="presetSens(60)">推杆</button>
+  </div>
+  <div class="adv-row">
+    <span class="lbl">杆速微调</span>
+    <button class="nudge" onclick="trimNudge(-0.5)">−0.5</button>
+    <span class="val" id="trimV">+0.0 m/s</span>
+    <button class="nudge" onclick="trimNudge(0.5)">+0.5</button>
+    <span style="color:#7fa68d;font-size:11px">短杆攻洞精准拨杆速</span>
+  </div>
+  <div class="host-row">
+    服务器
+    <a href="javascript:setHost()" id="hostV">检测中…</a>
+    <a href="javascript:rescan()" class="small" id="rescanBtn">↻ 重扫</a>
+  </div>
+</div>
+
+<script>
+const btn = document.getElementById("btn"), bar = document.getElementById("bar"), log = document.getElementById("log");
+
+/* ——— 力量调节（主控件，最常用）——— */
+let power = +(localStorage.egolfPower || 1.0);
+const powEl = document.getElementById("pow"), powV = document.getElementById("powV");
+function powSet(v) {
+  power = Math.max(0.4, Math.min(1.6, +v.toFixed(2)));
+  powEl.value = power; powV.textContent = power.toFixed(2);
+  localStorage.egolfPower = power;
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+function powNudge(d) { powSet(power + d); }
+powEl.oninput = () => powSet(+powEl.value);
+powEl.value = power; powV.textContent = power.toFixed(2);
+
+/* ——— 高级设置折叠 ——— */
+document.getElementById("cogBtn").onclick = () => {
+  const a = document.getElementById("adv"), c = document.getElementById("cogBtn");
+  a.classList.toggle("open"); c.classList.toggle("open");
+};
+
+/* ——— 灵敏度 ——— */
+const sens = document.getElementById("sens"), sensV = document.getElementById("sensV");
+sens.oninput = () => { sensV.textContent = sens.value; };
+function presetSens(v) { sens.value = v; sensV.textContent = v; }
+
+/* ——— 杆速微调（trim，短杆攻洞精确拨杆速用）——— */
+let trim = +(localStorage.egolfTrim || 0);
+const trimV = document.getElementById("trimV");
+function trimShow() { trimV.textContent = (trim >= 0 ? "+" : "") + trim.toFixed(1) + " m/s"; }
+function trimNudge(d) {
+  trim = Math.max(-10, Math.min(10, trim + d));
+  localStorage.egolfTrim = trim; trimShow();
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+trimShow();
+
+/* ——— 状态机：甩手机击球（抗噪滤波）——— */
+let phase = "idle", med = [0, 0, 0], env = 0, nf = 0, peak = 0, tPhase = 0, tPeak = 0, coolT = 0, alphaDown = null;
+const ENV_UP = 0.50, ENV_DOWN = 0.15;
+const NF_RATE = 0.02;
+const FALL = 0.45;
+const RISE_MIN = 80;
+const DUR_MAX = 900;
+const COOL_MS = 250;
+function csFromPeak(p) { return 5 + 45 * (1 - Math.exp(-p / 900)); }
+function resetIdle() {
+  phase = "idle"; peak = 0;
+  btn.classList.remove("swing"); btn.innerHTML = "就绪<br>甩手机！";
+}
+let strokes = 0;
+function fire(pk) {
+  const cs = Math.min(62, Math.max(1, csFromPeak(pk) * power + trim));
+  let dA = (alphaNow != null && alphaDown != null) ? alphaNow - alphaDown : 0;
+  if (dA > 180) dA -= 360; if (dA < -180) dA += 360;
+  const fa = Math.min(15, Math.max(-15, -dA * 0.12));
+  phase = "cool"; coolT = performance.now();
+  btn.classList.remove("swing"); btn.innerHTML = "击球<br>✓";
+  send(cs, fa);
+}
+
+/* ——— 设备姿态 / 运动 ——— */
+let live = false, alphaNow = null;
+window.addEventListener("deviceorientation", e => { if (e.alpha != null) alphaNow = e.alpha; });
+window.addEventListener("devicemotion", e => {
+  if (!live || !e.rotationRate) return;
+  const r = e.rotationRate, ac = e.acceleration || {};
+  const g = Math.hypot(r.alpha || 0, r.beta || 0, r.gamma || 0);
+  const a = Math.hypot(ac.x || 0, ac.y || 0, ac.z || 0);
+  const x = g + 8 * a;
+  med[0] = med[1]; med[1] = med[2]; med[2] = x;
+  const m = Math.max(Math.min(med[0], med[1]), Math.min(Math.max(med[0], med[1]), med[2]));
+  env = (m > env) ? env + (m - env) * ENV_UP
+                  : env + (m - env) * ENV_DOWN;
+  const now = performance.now();
+  const TH = Math.max(+sens.value, nf * 2.5 + 15);
+  bar.style.width = Math.min(100, env / (TH * 4) * 100) + "%";
+  if (phase === "cool") {
+    if ((now - coolT > COOL_MS && env < TH * 0.7) || now - coolT > 800) resetIdle();
+    return;
+  }
+  if (phase === "idle") {
+    nf += (env - nf) * NF_RATE;
+    if (env > TH) {
+      peak = env; tPhase = tPeak = now; alphaDown = alphaNow;
+      phase = "flick";
+      btn.classList.add("swing"); btn.innerHTML = "甩动<br>↯";
+    }
+    return;
+  }
+  if (phase === "flick") {
+    if (env > peak) { peak = env; tPeak = now; }
+    if (env < peak * FALL) {
+      if (tPeak - tPhase > RISE_MIN && peak > TH * 1.15) fire(peak);
+      else resetIdle();
+    } else if (now - tPhase > DUR_MAX) resetIdle();
+  }
+});
+
+/* ——— 瞄准 / 发送 ——— */
+let aimTotal = 0;
+async function aimNudge(d) {
+  aimTotal = Math.max(-15, Math.min(15, aimTotal + d));
+  document.getElementById("aimNow").textContent = aimTotal.toFixed(1) + "°";
+  if (navigator.vibrate) navigator.vibrate(15);
+  try {
+    await fetch(API + "/api/swing", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ aimDelta: d }) });
+  } catch (e) {}
+}
+async function send(cs, fa) {
+  strokes++;
+  aimTotal = 0; document.getElementById("aimNow").textContent = "0.0°";
+  if (navigator.vibrate) navigator.vibrate(60);
+  log.innerHTML = "第 " + strokes + " 杆 · 杆速 " + cs.toFixed(1) + " m/s · 杆面 " + fa.toFixed(1) + "°<br>" +
+    (log.innerHTML.split("<br>").slice(0, 2).join("<br>"));
+  try {
+    await fetch(API + "/api/swing", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clubSpeed: cs, faceAngle: fa }) });
+  } catch (e) { log.innerHTML = "发送失败：" + e.message + "<br>" + log.innerHTML; }
+}
+
+/* ——— API 基址 ——— */
+const isApk = (location.protocol === "file:");
+let API = localStorage.egolfHost || (isApk ? "" : location.origin);
+function setHost() {
+  const h = prompt("游戏主机地址（留空自动扫描）", API);
+  if (h !== null) {
+    API = h.replace(/\/$/, "");
+    if (API) localStorage.egolfHost = API; else delete localStorage.egolfHost;
+    document.getElementById("hostV").textContent = API || "自动扫描中…";
+    if (!API) rescan();
+  }
+}
+function rescan() {
+  if (window.AndroidScan) { document.getElementById("hostV").textContent = "扫描中…"; AndroidScan.rescan(); }
+}
+window.__scanResult = function(host) {
+  if (host) {
+    API = host; localStorage.egolfHost = host;
+    document.getElementById("hostV").textContent = host;
+  } else {
+    document.getElementById("hostV").textContent = API ? (API + "（未确认）") : "未找到，点此手填";
+  }
+};
+
+/* ——— 按钮 / 启动 ——— */
+function startSensors() {
+  live = true; btn.classList.add("on"); btn.innerHTML = "就绪<br>甩手机！";
+  log.textContent = "等待甩动…（游戏端需点「📱 手机球杆」）";
+}
+btn.onclick = async () => {
+  if (live) { live = false; resetIdle(); btn.classList.remove("on");
+    btn.innerHTML = "启动<br>传感器"; log.textContent = "已停止"; return; }
+  try {
+    if (typeof DeviceMotionEvent !== "undefined" && DeviceMotionEvent.requestPermission) {
+      const p = await DeviceMotionEvent.requestPermission();
+      if (p !== "granted") { log.textContent = "未授权运动传感器"; return; }
+      if (DeviceOrientationEvent.requestPermission) await DeviceOrientationEvent.requestPermission();
+    }
+  } catch (e) {}
+  startSensors();
+};
+(function autoStart() {
+  const needGesture = (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function");
+  if (needGesture) { log.textContent = "点上方圆形按钮授权传感器"; return; }
+  startSensors();
+})();
+document.getElementById("hostV").textContent = API || (isApk ? "自动扫描中…" : location.origin);
+</script>
+</body>
+</html>
